@@ -80,6 +80,7 @@
     @media (max-width: 800px) { .hero, .route-lab { grid-template-columns: 1fr; } .hero { padding: 64px 0; gap: 50px; min-height: auto; } .console-card { transform: none; } .cards { grid-template-columns: 1fr; } .flow { grid-template-columns: 1fr; gap: 14px; } .flow-step:not(:last-child)::after { top: auto; right: 50%; bottom: -17px; transform: translateX(50%) rotate(90deg); } }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } .console-card { transform: none; } }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
   <div class="grid" aria-hidden="true"></div><div class="orb orb--pink" aria-hidden="true"></div><div class="orb orb--cyan" aria-hidden="true"></div>
@@ -161,5 +162,94 @@
     const card = document.querySelector('#tilt-card');
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { card.addEventListener('pointermove', e => { const r = card.getBoundingClientRect(); card.style.transform = `rotateY(${((e.clientX-r.left)/r.width-.5)*12}deg) rotateX(${((e.clientY-r.top)/r.height-.5)*-10}deg)`; }); card.addEventListener('pointerleave', () => { card.style.transform = ''; }); }
   </script>
+
+<script>
+  const container = document.getElementById('canvas-container');
+  if (container) {
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight * 0.6), 0.1, 1000);
+    camera.position.z = 40;
+    camera.position.y = 10;
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight * 0.6);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    // Group for rotation
+    const system = new THREE.Group();
+    scene.add(system);
+
+    // Central "Preclassifier Node"
+    const coreGeom = new THREE.IcosahedronGeometry(8, 1);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xff2e63, wireframe: true, transparent: true, opacity: 0.8 });
+    const core = new THREE.Mesh(coreGeom, coreMat);
+    system.add(core);
+
+    // Inner glowing core
+    const innerGeom = new THREE.IcosahedronGeometry(4, 0);
+    const innerMat = new THREE.MeshBasicMaterial({ color: 0x08d9d6, wireframe: false, transparent: true, opacity: 0.3 });
+    const inner = new THREE.Mesh(innerGeom, innerMat);
+    system.add(inner);
+
+    // Orbiting rings representing models
+    const rings = [
+      { radius: 15, speed: 0.01, color: 0x08d9d6 },
+      { radius: 22, speed: -0.007, color: 0xffd400 },
+      { radius: 30, speed: 0.005, color: 0x7b2ff7 }
+    ];
+    
+    rings.forEach(r => {
+      const g = new THREE.TorusGeometry(r.radius, 0.1, 16, 100);
+      const m = new THREE.MeshBasicMaterial({ color: r.color, transparent: true, opacity: 0.4 });
+      const mesh = new THREE.Mesh(g, m);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.userData = { speed: r.speed };
+      system.add(mesh);
+    });
+
+    // Particles representing incoming requests
+    const particleCount = 100;
+    const pGeom = new THREE.BufferGeometry();
+    const pPos = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      pPos[i*3] = (Math.random() - 0.5) * 100;
+      pPos[i*3+1] = (Math.random() - 0.5) * 100;
+      pPos[i*3+2] = (Math.random() - 0.5) * 100;
+    }
+    pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({ color: 0xfff8f2, size: 0.5, transparent: true, opacity: 0.6 });
+    const particles = new THREE.Points(pGeom, pMat);
+    system.add(particles);
+
+    const animate = function () {
+      requestAnimationFrame(animate);
+      
+      core.rotation.x += 0.005;
+      core.rotation.y += 0.01;
+      inner.rotation.y -= 0.02;
+      
+      system.children.forEach(c => {
+        if (c.userData.speed) {
+          c.rotation.z += c.userData.speed; // torus is rotated 90deg on X
+        }
+      });
+      
+      system.rotation.y += 0.002;
+      particles.rotation.y += 0.001;
+
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / (window.innerHeight * 0.6);
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight * 0.6);
+    });
+  }
+</script>
 </body>
 </html>
