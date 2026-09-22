@@ -1,6 +1,10 @@
 # llm-preclassifier
 
 [![CI](https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml/badge.svg)](https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml)
+<div align="center">
+  <img src="assets/3d-hero.svg" alt="Animated LLM Preclassifier Architecture" width="100%">
+</div>
+
 [![License](https://img.shields.io/badge/license-Apache--2.0-08D9D6.svg)](LICENSE)
 
 **A self-hosted, provider-neutral preflight classifier for agent requests.**
