@@ -132,6 +132,10 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 - [🤝 Contributing Guidelines](CONTRIBUTING.md)
 - [📝 Changelog](CHANGELOG.md)
 
+## Support
+
+If this project is useful to you, you can support its ongoing development at [Ko-fi](https://ko-fi.com/sasiverse).
+
 > [!WARNING]
 > This service acts as an advisory sidecar. It is **not** a universal security firewall. It does not determine whether a prompt is fundamentally harmless, authorized by identity, or structurally safe against jailbreaks. Apply proper boundary controls at your tool-execution layer.
 
