@@ -1,11 +1,13 @@
 # llm-preclassifier
 
-[![CI](https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml/badge.svg)](https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml)
 <div align="center">
   <img src="assets/3d-hero.svg" alt="Animated LLM Preclassifier Architecture" width="100%">
 </div>
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-08D9D6.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/sasindudilshanranwadana/llm-preclassifier/ci.yml?branch=main&label=CI&color=08D9D6)](https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-FF2E63.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11-7B2FF7.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/docker-ready-FFD400.svg)](Dockerfile)
 
 **A self-hosted, provider-neutral preflight classifier for agent requests.**
 
@@ -13,7 +15,7 @@
 
 It is a small decision sidecar, not a universal LLM gateway. It does not choose a provider, forward prompts, execute tools, make security guarantees, or claim to select the “best” model.
 
-[Launch site](https://sasindudilshanranwadana.github.io/llm-preclassifier/) · [Architecture](docs/architecture.md) · [Configuration](docs/configuration.md) · [Threat model](docs/threat-model.md)
+[SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Why use it?
 
@@ -100,7 +102,7 @@ Full OpenAPI documentation is available at `/docs` when the service is running.
 - The default Compose file binds only to loopback and applies a read-only filesystem, non-root runtime, dropped capabilities, `no-new-privileges`, and resource limits.
 - Decision logging is off by default. If enabled, it records allowlisted decision metadata, never prompts, message content, headers, model responses, or exception text.
 
-Read [Security](SECURITY.md), [Privacy](docs/privacy.md), and the [threat model](docs/threat-model.md) before exposing the service beyond a trusted network.
+Read [SECURITY.md](SECURITY.md) before exposing the service beyond a trusted network.
 
 ## Development
 
