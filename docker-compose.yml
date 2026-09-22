@@ -1,0 +1,24 @@
+services:
+  llm-preclassifier:
+    build:
+      context: .
+      target: runtime
+    image: llm-preclassifier:local
+    ports:
+      - "127.0.0.1:8802:8802"
+    environment:
+      LLM_PRECLASSIFIER_ENV: production
+      CLIENT_API_KEYS: ${CLIENT_API_KEYS:?set CLIENT_API_KEYS in your shell or .env}
+      MAX_REQUEST_BYTES: "65536"
+      MAX_MESSAGES: "32"
+      LOG_DECISIONS: "false"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+    mem_limit: 256m
+    restart: unless-stopped
