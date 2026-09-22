@@ -12,3 +12,5 @@ logs/
 .DS_Store
 site/node_modules/
 site/dist/
+src/*.egg-info/
+*.egg-info/
