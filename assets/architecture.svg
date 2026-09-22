@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="100%" height="400">
+  <defs>
+    <!-- Grid -->
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(248, 248, 242, 0.04)" stroke-width="1"/>
+    </pattern>
+    <!-- Glows -->
+    <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="800" height="400" fill="#0B0C10"/>
+  <rect width="800" height="400" fill="url(#grid)"/>
+
+  <g font-family="'JetBrains Mono', monospace" font-size="12" font-weight="600" text-anchor="middle">
+
+    <!-- App / Agent (Start) -->
+    <g transform="translate(100, 200)">
+      <rect x="-60" y="-30" width="120" height="60" fill="rgba(248, 248, 242, 0.05)" stroke="#F8F8F2" stroke-width="2" rx="4"/>
+      <text y="4" fill="#F8F8F2">AGENT APP</text>
+    </g>
+
+    <!-- Preclassifier (Center) -->
+    <g transform="translate(360, 200)">
+      <rect x="-80" y="-40" width="160" height="80" fill="rgba(8, 217, 214, 0.1)" stroke="#08D9D6" stroke-width="2" rx="4" filter="url(#neon-glow)"/>
+      <text y="-5" fill="#08D9D6">PRECLASSIFIER</text>
+      <text y="15" fill="#08D9D6" font-size="10" opacity="0.8">OFFLINE ENGINE</text>
+    </g>
+
+    <!-- Dest 1: Economy Model -->
+    <g transform="translate(660, 80)">
+      <rect x="-70" y="-25" width="140" height="50" fill="rgba(123, 47, 247, 0.1)" stroke="#7B2FF7" stroke-width="1.5" rx="4"/>
+      <text y="4" fill="#7B2FF7">ECONOMY LLM</text>
+    </g>
+
+    <!-- Dest 2: SOTA Model -->
+    <g transform="translate(660, 200)">
+      <rect x="-70" y="-25" width="140" height="50" fill="rgba(255, 212, 0, 0.1)" stroke="#FFD400" stroke-width="1.5" rx="4"/>
+      <text y="4" fill="#FFD400">STATE-OF-THE-ART</text>
+    </g>
+
+    <!-- Dest 3: Tool / Escalate -->
+    <g transform="translate(660, 320)">
+      <rect x="-70" y="-25" width="140" height="50" fill="rgba(255, 46, 99, 0.1)" stroke="#FF2E63" stroke-width="1.5" rx="4"/>
+      <text y="4" fill="#FF2E63">ESCALATE/BLOCK</text>
+    </g>
+
+    <!-- Connections (Lines) -->
+    <g stroke-width="2" fill="none" stroke-linejoin="round">
+      <!-- Input line -->
+      <path d="M 160 200 L 280 200" stroke="#F8F8F2" stroke-opacity="0.3"/>
+      
+      <!-- Output 1 -->
+      <path d="M 440 200 L 500 200 L 500 80 L 590 80" stroke="#7B2FF7" stroke-opacity="0.5" stroke-dasharray="8 4">
+        <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite"/>
+      </path>
+      
+      <!-- Output 2 -->
+      <path d="M 440 200 L 590 200" stroke="#FFD400" stroke-opacity="0.5" stroke-dasharray="8 4">
+        <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite"/>
+      </path>
+      
+      <!-- Output 3 -->
+      <path d="M 440 200 L 500 200 L 500 320 L 590 320" stroke="#FF2E63" stroke-opacity="0.5" stroke-dasharray="8 4">
+        <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite"/>
+      </path>
+    </g>
+
+    <!-- Animated Data Packets (Dots) -->
+    <circle r="4" fill="#08D9D6" filter="url(#neon-glow)">
+      <animateMotion path="M 160 200 L 280 200" dur="1s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="4" fill="#7B2FF7">
+      <animateMotion path="M 440 200 L 500 200 L 500 80 L 590 80" dur="1.2s" begin="0.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="4" fill="#FFD400">
+      <animateMotion path="M 440 200 L 590 200" dur="1s" begin="0.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="4" fill="#FF2E63">
+      <animateMotion path="M 440 200 L 500 200 L 500 320 L 590 320" dur="1.5s" begin="0.8s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- Text Labels for Routing -->
+    <text x="220" y="185" fill="#F8F8F2" opacity="0.6" font-size="10">HTTP POST</text>
+    <text x="540" y="70" fill="#7B2FF7" opacity="0.8" font-size="10">SIMPLE / NATIVE</text>
+    <text x="540" y="190" fill="#FFD400" opacity="0.8" font-size="10">COMPLEX</text>
+    <text x="540" y="310" fill="#FF2E63" opacity="0.8" font-size="10">POLICY VIOLATION</text>
+  </g>
+</svg>

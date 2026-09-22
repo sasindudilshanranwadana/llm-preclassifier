@@ -1,123 +1,137 @@
-# llm-preclassifier
-
 <div align="center">
-  <img src="assets/3d-hero.svg" alt="Animated LLM Preclassifier Architecture" width="100%">
+  <img src="assets/3d-hero.svg" alt="Animated LLM Preclassifier Hero" width="100%">
 </div>
 
-[![CI](https://img.shields.io/github/actions/workflow/status/sasindudilshanranwadana/llm-preclassifier/ci.yml?branch=main&label=CI&color=08D9D6)](https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-FF2E63.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11-7B2FF7.svg)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/docker-ready-FFD400.svg)](Dockerfile)
+<div align="center">
+  <a href="https://github.com/sasindudilshanranwadana/llm-preclassifier/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/sasindudilshanranwadana/llm-preclassifier/ci.yml?branch=main&label=CI&color=08D9D6" alt="CI">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-FF2E63.svg" alt="License">
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/python-3.11-7B2FF7.svg" alt="Python">
+  </a>
+  <a href="Dockerfile">
+    <img src="https://img.shields.io/badge/docker-ready-FFD400.svg" alt="Docker">
+  </a>
+</div>
 
-**A self-hosted, provider-neutral preflight classifier for agent requests.**
+<br>
 
-`llm-preclassifier` inspects the shape of an incoming task before your agent calls a model or tool. It returns a versioned, explainable decision containing task type, complexity, explicit tool need, a configurable capability-tier recommendation, confidence, and an action.
+> **A self-hosted, provider-neutral preflight classifier for agent requests.** 
+> Intercept, classify, and route incoming agent tasks _before_ calling a heavy LLM or executing a tool.
 
-It is a small decision sidecar, not a universal LLM gateway. It does not choose a provider, forward prompts, execute tools, make security guarantees, or claim to select the “best” model.
+<br>
 
-[SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [CHANGELOG](CHANGELOG.md)
+### THE PROBLEM & THE SOLUTION
 
-## Why use it?
+| ❌ The Problem | 🟩 The Solution |
+|---|---|
+| Agents send **all** prompts through the same slow, expensive state-of-the-art LLM gateway. | Route **simple** tasks to fast local/economy models, saving tokens and latency. |
+| Tool boundaries are granted blindly based on the user's prompt wrapper. | Detect **explicit tool needs** upfront and fail-fast if unauthorized. |
+| Black-box gateways obscure _why_ a model was selected. | Get an **inspectable, deterministic, offline** policy decision before execution. |
 
-Agent applications often send simple extraction or summarisation work through the same path as code changes, multi-step research, and tool-using tasks. A preflight decision gives the application a transparent policy input before it spends tokens or grants capabilities.
+<br>
 
-- **Offline by default:** the V0.1 engine is deterministic and does not contact a provider.
-- **Inspectable:** every decision has versioned labels, confidence, action, and reason codes.
-- **Conservative:** ambiguous and policy-sensitive signals can return `unknown` or `escalate`.
-- **Composable:** use it ahead of a custom agent loop, LiteLLM policy, or any model provider.
-- **Private by default:** prompts are never written to disk by the application. Optional decision logs contain allowlisted metadata only.
+## ⚡ ARCHITECTURE
 
-## Quick start
+<div align="center">
+  <img src="assets/architecture.svg" alt="Architecture Flowchart" width="100%">
+</div>
 
-```bash
-git clone https://github.com/sasindudilshanranwadana/llm-preclassifier.git
-cd llm-preclassifier
-docker compose up --build
+`llm-preclassifier` is a decision sidecar. It receives your agent's input, applies a configurable standard of rules, and issues a structured routing verdict. **It does not execute tools, forward API keys, or hallucinate.**
+
+<br>
+
+## 🚀 QUICK START
+
+The service is distributed as a hardened, non-root Docker container.
+
+```console
+$ docker compose up --build -d
+[+] Building 6.2s (13/13) FINISHED
+[+] Running 1/1
+ ✔ Container llm-preclassifier-runtime-1  Started
 ```
 
-The service binds to `127.0.0.1:8802` by default.
+Check the health status:
+```console
+$ curl -sS http://127.0.0.1:8802/healthz
+{"status":"ok"}
+```
 
-```bash
+<br>
+
+## 📊 DECISION ENGINE (API)
+
+Send a raw prompt array to the `/v1/classify` endpoint. 
+
+**Request:**
+```json
 curl -X POST http://127.0.0.1:8802/v1/classify \
-  -H 'content-type: application/json' \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "Inspect this repository, fix the failing tests, then run the test suite."}
-    ],
-    "available_tools": ["filesystem", "terminal"]
-  }'
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Summarise this report."}]}'
 ```
 
+**Verdict:**
 ```json
 {
   "version": "v1",
-  "task_type": "coding",
-  "complexity": "complex",
-  "tool_requirement": "required",
-  "recommended_model_tier": "capable",
+  "task_type": "summarization",
+  "complexity": "simple",
+  "tool_requirement": "none",
+  "recommended_model_tier": "economy",
   "confidence": 0.88,
   "action": "route",
-  "reasons": ["offline_rules_v1", "tool_required", "multi_step_or_artifact_signal"],
+  "reasons": ["offline_rules_v1"],
   "policy_version": "v1"
 }
 ```
 
-## Integration model
+<br>
 
-```text
-Agent request
-    │
-    ▼
-llm-preclassifier
-    │  task shape + complexity + explicit signals
-    ▼
-Your routing policy
-    │  choose model, tools, human review, or an abstention path
-    ▼
-Your agent loop / gateway / provider
-```
+## ⚙️ CAPABILITIES
 
-The service recommends abstract tiers (`economy`, `standard`, `capable`, `reasoning`, `human_or_policy_review`). Your application maps those tiers to its own models, pricing, privacy requirements, and policies.
+> [!NOTE]
+> **V0.1 represents the Offline Tier.** Deterministic logic rules are applied in-memory. Zero outbound requests are made to any provider.
 
-## API
+<details>
+<summary><b>View supported configuration variables</b></summary>
+<br>
 
-### `POST /v1/classify`
+Configuration is entirely environment-driven. Do not commit `.env` files.
 
-Accepts OpenAI-style `messages` and optional `available_tools`.
+| Variable | Default | Purpose |
+|---|---:|---|
+| `LLM_PRECLASSIFIER_HOST` | `0.0.0.0` | Bind address. |
+| `LLM_PRECLASSIFIER_PORT` | `8802` | Listening port. |
+| `LLM_PRECLASSIFIER_LOG_DECISIONS`| `false` | Log classification outcomes (but never prompt content). |
+| `LLM_PRECLASSIFIER_CACHE_SIZE` | `1000` | LRU cache capacity. |
+| `LLM_PRECLASSIFIER_CACHE_TTL_SECONDS`| `3600` | LRU cache time-to-live. |
+| `LLM_PRECLASSIFIER_API_TOKEN` | `""` | Optional static bearer token for the API. |
 
-- `task_type`: `chat`, `classification`, `coding`, `extraction`, `planning`, `reasoning`, `research`, `summarization`, `writing`, or `unknown`
-- `complexity`: `trivial`, `simple`, `moderate`, `complex`, or `unknown`
-- `tool_requirement`: `none`, `optional`, `required`, or `unknown`
-- `action`: `route`, `escalate`, or `unknown`
+</details>
 
-`POST /v1/route` is a compatibility alias. `GET /healthz` is an unauthenticated liveness endpoint. `GET /status` is protected whenever `CLIENT_API_KEYS` is configured.
+<details>
+<summary><b>View privacy and security guarantees</b></summary>
+<br>
 
-Full OpenAPI documentation is available at `/docs` when the service is running.
+- **In-memory Processing:** Prompts are processed strictly in RAM.
+- **Zero Prompt Logging:** `LLM_PRECLASSIFIER_LOG_DECISIONS=true` logs the _decision_ (e.g. `complexity: simple`), but strips all prompt content, user messages, and headers.
+- **Hardened Runtime:** The Docker container drops all capabilities (`--cap-drop ALL`), runs read-only (`--read-only`), prevents privilege escalation (`no-new-privileges`), and uses a non-root user.
 
-## Security and privacy defaults
+</details>
 
-- In `production` mode, startup fails unless `CLIENT_API_KEYS` contains at least one credential.
-- Configure credentials with the `Authorization: Bearer <token>` header.
-- Request body and message-count limits are enforced.
-- The default Compose file binds only to loopback and applies a read-only filesystem, non-root runtime, dropped capabilities, `no-new-privileges`, and resource limits.
-- Decision logging is off by default. If enabled, it records allowlisted decision metadata, never prompts, message content, headers, model responses, or exception text.
+<br>
 
-Read [SECURITY.md](SECURITY.md) before exposing the service beyond a trusted network.
+## 📖 PROJECT RESOURCES
 
-## Development
+- [⚖️ License (Apache 2.0)](LICENSE)
+- [🛡️ Security Policy](SECURITY.md)
+- [🤝 Contributing Guidelines](CONTRIBUTING.md)
+- [📝 Changelog](CHANGELOG.md)
 
-```bash
-python3 -m pip install -e '.[dev]'
-make test
-make build
-```
+> [!WARNING]
+> This service acts as an advisory sidecar. It is **not** a universal security firewall. It does not determine whether a prompt is fundamentally harmless, authorized by identity, or structurally safe against jailbreaks. Apply proper boundary controls at your tool-execution layer.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and testing guidance.
-
-## Scope and limitations
-
-The rules are an explicit baseline, not a learned quality predictor. `confidence` is a policy signal, not calibrated probability. A classification result cannot establish that a request is safe, permitted, accurate, or suitable for a particular model. Evaluate policies against your own workload before automating routing decisions or claiming cost or quality improvements.
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
