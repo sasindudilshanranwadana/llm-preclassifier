@@ -25,6 +25,7 @@ class Settings:
     policy_path: str = field(default_factory=lambda: os.getenv("POLICY_PATH", ""))
     enable_feedback: bool = field(default_factory=lambda: os.getenv("ENABLE_FEEDBACK", "false").lower() == "true")
     feedback_log_path: str = field(default_factory=lambda: os.getenv("FEEDBACK_LOG_PATH", ""))
+    model_catalog_path: str = field(default_factory=lambda: os.getenv("MODEL_CATALOG_PATH", ""))
 
     @property
     def api_keys(self) -> tuple[str, ...]:

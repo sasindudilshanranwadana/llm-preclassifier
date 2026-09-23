@@ -102,3 +102,34 @@ def test_unrecognised_short_prompt_is_low_confidence_chat():
 
     assert greeting.task_type == unmatched.task_type == "chat"
     assert unmatched.confidence < greeting.confidence
+
+
+def test_model_recommendations_are_populated_from_the_given_catalog():
+    from llm_preclassifier.catalog import default_catalog
+
+    decision = classify(
+        [{"role": "user", "content": "Summarise this report."}],
+        catalog=default_catalog(),
+    )
+
+    assert decision.recommended_model_tier == "economy"
+    assert decision.model_recommendations
+    assert all(rec.currency == "USD" for rec in decision.model_recommendations)
+
+
+def test_model_recommendations_are_empty_without_a_catalog():
+    decision = classify([{"role": "user", "content": "Summarise this report."}])
+
+    assert decision.model_recommendations == []
+
+
+def test_escalated_decisions_have_no_model_recommendations():
+    from llm_preclassifier.catalog import default_catalog
+
+    decision = classify(
+        [{"role": "user", "content": "What dosage of ibuprofen is safe?"}],
+        catalog=default_catalog(),
+    )
+
+    assert decision.action == "escalate"
+    assert decision.model_recommendations == []

@@ -241,3 +241,40 @@ def test_feedback_rejects_unknown_fields(tmp_path):
     })
 
     assert response.status_code == 422
+
+
+def test_classify_response_includes_model_recommendations():
+    response = client().post(
+        "/v1/classify",
+        json={"messages": [{"role": "user", "content": "Summarise this report."}]},
+    )
+
+    recommendations = response.json()["model_recommendations"]
+    assert recommendations
+    assert {"provider", "model", "input_cost_per_million", "output_cost_per_million", "currency"} <= set(
+        recommendations[0]
+    )
+
+
+def test_model_catalog_endpoint_reports_active_catalog_and_requires_auth(tmp_path):
+    catalog_file = tmp_path / "model_catalog.yaml"
+    source = Path(__file__).resolve().parents[1] / "src" / "llm_preclassifier" / "data" / "model_catalog.yaml"
+    catalog_file.write_text(source.read_text().replace("version: '2026.09.1'", "version: 'acme-catalog-1'"))
+    api = client(model_catalog_path=str(catalog_file), client_api_keys="secret")
+
+    assert api.get("/v1/model-catalog").status_code == 401
+    body = api.get("/v1/model-catalog", headers={"Authorization": "Bearer secret"}).json()
+
+    assert body["version"] == "acme-catalog-1"
+    assert len(body["sha256"]) == 64
+    assert body["currency"] == "USD"
+
+
+def test_invalid_model_catalog_fails_at_startup(tmp_path):
+    from llm_preclassifier.catalog import ModelCatalogError
+
+    broken = tmp_path / "model_catalog.yaml"
+    broken.write_text("version: '1'\n")
+
+    with pytest.raises(ModelCatalogError, match="missing keys"):
+        create_app(Settings(model_catalog_path=str(broken)))

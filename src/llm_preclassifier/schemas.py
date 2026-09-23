@@ -30,6 +30,17 @@ class ClassificationRequest(BaseModel):
     policy_flags: list[str] = Field(default_factory=list, max_length=32)
 
 
+class ModelRecommendation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str
+    input_cost_per_million: float = Field(ge=0.0)
+    output_cost_per_million: float = Field(ge=0.0)
+    currency: str
+    notes: str | None = None
+
+
 class ClassificationDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -43,6 +54,7 @@ class ClassificationDecision(BaseModel):
     reasons: list[str] = Field(min_length=1, max_length=16)
     policy_version: str = Field(default="v1", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     decision_id: str = Field(default_factory=lambda: uuid4().hex)
+    model_recommendations: list[ModelRecommendation] = Field(default_factory=list, max_length=8)
 
 
 class HealthResponse(BaseModel):

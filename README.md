@@ -86,11 +86,15 @@ curl -X POST http://127.0.0.1:8802/v1/classify \
   "action": "route",
   "reasons": ["offline_rules_v1"],
   "policy_version": "2026.09.1",
-  "decision_id": "3f8e2c1a9d7b4f0e8c6a5d2b1e9f7a3c"
+  "decision_id": "3f8e2c1a9d7b4f0e8c6a5d2b1e9f7a3c",
+  "model_recommendations": [
+    {"provider": "anthropic", "model": "claude-haiku-4-5", "input_cost_per_million": 1.0,
+     "output_cost_per_million": 5.0, "currency": "USD", "notes": "Cheapest general-purpose option; good for extraction, summarization, chat."}
+  ]
 }
 ```
 
-`decision_id` is an opaque per-decision identifier (stable across cache hits for the same request) for referencing the decision from `/v1/feedback`.
+`decision_id` is an opaque per-decision identifier (stable across cache hits for the same request) for referencing the decision from `/v1/feedback`. `model_recommendations` maps the abstract `recommended_model_tier` to concrete provider/model picks from the versioned, operator-editable [model catalog](src/llm_preclassifier/data/model_catalog.yaml) — empty for `unknown` and `human_or_policy_review`.
 
 <br>
 
@@ -120,6 +124,7 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 | `POLICY_PATH` | `""` | Custom routing policy YAML; empty uses the bundled [`policy.yaml`](src/llm_preclassifier/data/policy.yaml). Validated at startup. |
 | `ENABLE_FEEDBACK` | `false` | Expose `POST /v1/feedback` for recording corrections against a `decision_id`. |
 | `FEEDBACK_LOG_PATH` | `""` | JSONL path; required when `ENABLE_FEEDBACK=true`. |
+| `MODEL_CATALOG_PATH` | `""` | Custom model catalog YAML; empty uses the bundled [`model_catalog.yaml`](src/llm_preclassifier/data/model_catalog.yaml). Validated at startup. |
 
 The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`). Docker Compose builds the `runtime-semantic` target; use `--target runtime` for the lean rules-only image.
 
@@ -175,6 +180,19 @@ curl -X POST http://127.0.0.1:8802/v1/feedback \
 ```
 
 Use this to build a labeled dataset from real traffic for `--policy` evaluation, without ever capturing what was actually asked.
+
+## 💰 MODEL CATALOG
+
+`recommended_model_tier` is deliberately abstract (`economy`, `standard`, `capable`, `reasoning`) so the rules never hardcode a specific vendor. The concrete mapping — provider, model name, and illustrative per-million-token cost — lives in a separate versioned file, [`model_catalog.yaml`](src/llm_preclassifier/data/model_catalog.yaml), so pricing can be kept current without a code release.
+
+```bash
+python -m llm_preclassifier.validate_catalog my-catalog.yaml                        # validate: OK version=... sha256=...
+python -m llm_preclassifier.evaluation eval/holdout.jsonl --catalog my-catalog.yaml  # attach recommendations while evaluating
+```
+
+- Every decision's `model_recommendations` reflects the active catalog; `GET /v1/model-catalog` (authenticated) reports its version, SHA-256 and currency.
+- Set `MODEL_CATALOG_PATH` to point at your own file, edited for your actual contracted rates. Invalid files (unknown/missing keys, negative costs, empty tiers) stop the service at startup.
+- These are **not fetched live** and are not a pricing guarantee — treat them as a starting point for your own cost model.
 
 ## 🎯 ACCURACY EVALUATION
 

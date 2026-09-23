@@ -1,0 +1,50 @@
+# Concrete model suggestions per abstract capability tier, with illustrative
+# per-million-token costs. Providers change pricing often: treat these numbers
+# as a starting point, not a live quote, and edit freely for your own contracts.
+#
+# Only the four actionable tiers need entries. `human_or_policy_review` and
+# `unknown` intentionally have no models: those decisions mean "do not route
+# to a model automatically".
+version: '2026.09.1'
+currency: USD
+tiers:
+  economy:
+    - provider: anthropic
+      model: claude-haiku-4-5
+      input_cost_per_million: 1.00
+      output_cost_per_million: 5.00
+      notes: Cheapest general-purpose option; good for extraction, summarization, chat.
+    - provider: openai
+      model: gpt-5-mini
+      input_cost_per_million: 0.25
+      output_cost_per_million: 2.00
+  standard:
+    - provider: anthropic
+      model: claude-sonnet-5
+      input_cost_per_million: 3.00
+      output_cost_per_million: 15.00
+      notes: Default choice for everyday coding and agent actions.
+    - provider: openai
+      model: gpt-5.1
+      input_cost_per_million: 2.50
+      output_cost_per_million: 10.00
+  capable:
+    - provider: anthropic
+      model: claude-sonnet-5
+      input_cost_per_million: 3.00
+      output_cost_per_million: 15.00
+      notes: Tool-heavy or multi-step agent work; upgrade to opus if it struggles.
+    - provider: openai
+      model: gpt-5.1
+      input_cost_per_million: 2.50
+      output_cost_per_million: 10.00
+  reasoning:
+    - provider: anthropic
+      model: claude-opus-5-5
+      input_cost_per_million: 15.00
+      output_cost_per_million: 75.00
+      notes: Deepest reasoning; reserve for complex planning, research, analysis.
+    - provider: openai
+      model: gpt-5.1-pro
+      input_cost_per_million: 15.00
+      output_cost_per_million: 60.00
