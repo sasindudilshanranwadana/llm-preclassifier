@@ -85,7 +85,7 @@ curl -X POST http://127.0.0.1:8802/v1/classify \
   "confidence": 0.88,
   "action": "route",
   "reasons": ["offline_rules_v1"],
-  "policy_version": "2026.09.1",
+  "policy_version": "2026.09.2",
   "decision_id": "3f8e2c1a9d7b4f0e8c6a5d2b1e9f7a3c",
   "model_recommendations": [
     {"provider": "anthropic", "model": "claude-haiku-4-5", "input_cost_per_million": 1.0,
@@ -162,6 +162,16 @@ Keyword rules only catch the wording they were written for. The semantic layer e
 pip install "llm-preclassifier[semantic]"
 SEMANTIC_MODEL=BAAI/bge-small-en-v1.5 uvicorn --factory llm_preclassifier.api:create_app
 ```
+
+## 📈 LEARNED TASK MODEL (BUILT IN)
+
+When no rule category matches, the rules fall back to `chat` or `classification`. In that case a small bundled model is consulted: a hashed n-gram logistic regression, ~230 KB, with pure-Python inference that adds under 1 ms per request.
+- It was trained on pinned public datasets (Dolly 15k, CodeAlpaca 20k, Glaive function-calling v2).
+- If its label has probability ≥ `learned.min_probability` (0.6), the decision uses that label with reason `learned_task_model`.
+- It never affects escalation, and it never overrides a clear rule match or a semantic vote.
+- Set `learned.enabled: false` in the policy to turn it off, or point `learned.model` at your own file.
+
+See [`training/README.md`](training/README.md) for data, licenses, results, known limits, and how to reproduce the file.
 
 ## 🗂️ ROUTING POLICY
 
@@ -258,8 +268,10 @@ Each JSONL line sets `prompt` (or `messages`), optional `available_tools` / `pol
 |---|---:|---|---:|---:|
 | `eval/dataset.jsonl` | 48 | Regression, gated in CI at 95% | 100% | 97.9% |
 | `eval/holdout.jsonl` | 32 | Regression, gated in CI at 95% (rules were tuned after first run) | 100% | 100% |
-| `eval/blind.jsonl` | 24 | Blind benchmark, report only | 37.5% | 79.2% |
-| `eval/blind-v2.jsonl` | 30 | Blind benchmark written after exemplars were frozen, report only | 26.7% | **93.3%** |
+| `eval/blind.jsonl` | 24 | Blind benchmark, report only | 45.8% | 79.2% |
+| `eval/blind-v2.jsonl` | 30 | Blind benchmark written after exemplars were frozen, report only | 33.3% | **93.3%** |
+
+Rules-only figures include the learned task model. Before it was added, they were 37.5% and 26.7%. The model did not change the rules + semantic figures, because the semantic vote takes precedence.
 
 High-stakes escalation across both blind sets: **15/15 caught with the semantic layer** (5/15 with rules only), at the cost of 2 false escalations out of 8 benign look-alikes (`compound interest` → financial, `how a bill becomes law` → legal). The layer is biased towards escalating on purpose.
 

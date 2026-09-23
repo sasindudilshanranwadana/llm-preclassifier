@@ -31,6 +31,11 @@ semantic = [
 redis = [
   "redis==5.2.1",
 ]
+train = [
+  "numpy>=1.26",
+  "scikit-learn==1.7.2",
+  "scipy>=1.11",
+]
 dev = [
   "pytest==8.3.5",
   "numpy>=1.26",
@@ -50,4 +55,4 @@ addopts = "-q"
 where = ["src"]
 
 [tool.setuptools.package-data]
-llm_preclassifier = ["data/*.json", "data/*.yaml"]
+llm_preclassifier = ["data/*.bin", "data/*.json", "data/*.yaml"]

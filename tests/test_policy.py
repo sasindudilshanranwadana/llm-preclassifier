@@ -68,6 +68,10 @@ def test_invalid_regex_names_the_offending_entry(tmp_path):
     (lambda raw: raw.update(version="has spaces!"), "version"),
     (lambda raw: raw.update(category_order=["writing", "gossip"]), "category_order"),
     (lambda raw: raw["patterns"].update(coding=[]), "at least one"),
+    (lambda raw: raw["learned"].update(enabled="yes"), "learned.enabled"),
+    (lambda raw: raw["learned"].update(min_probability=2), "learned.min_probability"),
+    (lambda raw: raw["learned"].pop("model"), "missing keys: learned.model"),
+    (lambda raw: raw["learned"].update(model="nope.bin"), "learned.model file not found"),
 ])
 def test_invalid_policies_are_rejected(tmp_path, mutate, message):
     with pytest.raises(PolicyError, match=message):
@@ -109,3 +113,35 @@ def test_missing_exemplars_file_is_rejected(tmp_path):
 
     with pytest.raises(PolicyError, match="exemplars"):
         load_policy(path)
+
+
+def test_policies_without_a_learned_section_use_the_default(tmp_path):
+    policy = load_policy(write_policy(tmp_path, lambda raw: raw.pop("learned")))
+
+    assert policy.learned == default_policy().learned
+    assert policy.learned.enabled
+
+
+def test_learned_model_can_be_disabled(tmp_path):
+    policy = load_policy(write_policy(tmp_path, lambda raw: raw["learned"].update(enabled=False)))
+
+    result = decide("Is a whale a fish or a mammal?", policy)
+
+    assert result.task_type == "chat"
+    assert "learned_task_model" not in result.reasons
+
+
+def test_learned_threshold_comes_from_policy(tmp_path):
+    policy = load_policy(write_policy(tmp_path, lambda raw: raw["learned"].update(min_probability=1.0)))
+
+    assert "learned_task_model" not in decide("Is a whale a fish or a mammal?", policy).reasons
+
+
+def test_learned_model_path_is_relative_to_the_policy_file(tmp_path):
+    (tmp_path / "model.bin").write_bytes(DEFAULT_PATH.with_name("task_model.bin").read_bytes())
+    path = write_policy(tmp_path, lambda raw: raw["learned"].update(model="model.bin"))
+
+    policy = load_policy(path)
+
+    assert policy.learned.model == (tmp_path / "model.bin").resolve()
+    assert decide("Is a whale a fish or a mammal?", policy).task_type == "classification"

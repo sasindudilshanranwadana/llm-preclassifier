@@ -98,10 +98,32 @@ def test_external_actions_beat_coding_words():
 
 def test_unrecognised_short_prompt_is_low_confidence_chat():
     greeting = decision("Hello there!")
-    unmatched = decision("Tell me about otters.")
+    unmatched = decision("What is the capital of France?")
 
     assert greeting.task_type == unmatched.task_type == "chat"
     assert unmatched.confidence < greeting.confidence
+
+
+def test_learned_model_routes_prompts_the_rules_miss():
+    result = decision("Is a whale a fish or a mammal?")
+
+    assert result.task_type == "classification"
+    assert "learned_task_model" in result.reasons
+    assert "no_category_signal" not in result.reasons
+    assert result.confidence >= 0.6
+
+
+def test_learned_agent_action_requires_tools():
+    result = decision("I need to know the weather in Tokyo right now.")
+
+    assert result.task_type == "agent_action"
+    assert result.tool_requirement == "required"
+
+
+def test_clear_rule_matches_are_not_overridden_by_the_learned_model():
+    result = decision("Extract the invoice number from this email.")
+
+    assert "learned_task_model" not in result.reasons
 
 
 def test_model_recommendations_are_populated_from_the_given_catalog():
