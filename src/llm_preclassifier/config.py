@@ -26,6 +26,10 @@ class Settings:
     enable_feedback: bool = field(default_factory=lambda: os.getenv("ENABLE_FEEDBACK", "false").lower() == "true")
     feedback_log_path: str = field(default_factory=lambda: os.getenv("FEEDBACK_LOG_PATH", ""))
     model_catalog_path: str = field(default_factory=lambda: os.getenv("MODEL_CATALOG_PATH", ""))
+    enable_proxy: bool = field(default_factory=lambda: os.getenv("ENABLE_PROXY", "false").lower() == "true")
+    proxy_upstream_base_url: str = field(default_factory=lambda: os.getenv("PROXY_UPSTREAM_BASE_URL", ""))
+    proxy_upstream_api_key: str = field(default_factory=lambda: os.getenv("PROXY_UPSTREAM_API_KEY", ""))
+    proxy_timeout_seconds: float = field(default_factory=lambda: float(os.getenv("PROXY_TIMEOUT_SECONDS", "60")))
 
     @property
     def api_keys(self) -> tuple[str, ...]:
@@ -46,3 +50,9 @@ class Settings:
             raise RuntimeError("DECISION_LOG_PATH is required when LOG_DECISIONS=true")
         if self.enable_feedback and not self.feedback_log_path:
             raise RuntimeError("FEEDBACK_LOG_PATH is required when ENABLE_FEEDBACK=true")
+        if self.enable_proxy and not self.proxy_upstream_base_url:
+            raise RuntimeError("PROXY_UPSTREAM_BASE_URL is required when ENABLE_PROXY=true")
+        if self.enable_proxy and not self.proxy_upstream_api_key:
+            raise RuntimeError("PROXY_UPSTREAM_API_KEY is required when ENABLE_PROXY=true")
+        if self.proxy_timeout_seconds <= 0:
+            raise RuntimeError("PROXY_TIMEOUT_SECONDS must be positive")

@@ -125,6 +125,10 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 | `ENABLE_FEEDBACK` | `false` | Expose `POST /v1/feedback` for recording corrections against a `decision_id`. |
 | `FEEDBACK_LOG_PATH` | `""` | JSONL path; required when `ENABLE_FEEDBACK=true`. |
 | `MODEL_CATALOG_PATH` | `""` | Custom model catalog YAML; empty uses the bundled [`model_catalog.yaml`](src/llm_preclassifier/data/model_catalog.yaml). Validated at startup. |
+| `ENABLE_PROXY` | `false` | Expose `POST /v1/chat/completions`: classify, then forward the request unmodified to `PROXY_UPSTREAM_BASE_URL`. |
+| `PROXY_UPSTREAM_BASE_URL` | `""` | OpenAI-compatible base URL (e.g. `https://api.openai.com/v1`); required when `ENABLE_PROXY=true`. |
+| `PROXY_UPSTREAM_API_KEY` | `""` | Bearer key sent to the upstream; required when `ENABLE_PROXY=true`. Never accepted from the client. |
+| `PROXY_TIMEOUT_SECONDS` | `60` | Upstream request timeout. |
 
 The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`). Docker Compose builds the `runtime-semantic` target; use `--target runtime` for the lean rules-only image.
 
@@ -193,6 +197,22 @@ python -m llm_preclassifier.evaluation eval/holdout.jsonl --catalog my-catalog.y
 - Every decision's `model_recommendations` reflects the active catalog; `GET /v1/model-catalog` (authenticated) reports its version, SHA-256 and currency.
 - Set `MODEL_CATALOG_PATH` to point at your own file, edited for your actual contracted rates. Invalid files (unknown/missing keys, negative costs, empty tiers) stop the service at startup.
 - These are **not fetched live** and are not a pricing guarantee — treat them as a starting point for your own cost model.
+
+## 🔌 OPENAI-COMPATIBLE PROXY MODE (OPTIONAL)
+
+By default the service only classifies — it never calls a model. Set `ENABLE_PROXY=true`, `PROXY_UPSTREAM_BASE_URL` and `PROXY_UPSTREAM_API_KEY` to expose `POST /v1/chat/completions`: the request is classified locally, then forwarded **unmodified** (model, messages, and all other OpenAI fields untouched) to your configured upstream.
+
+```bash
+curl -X POST http://127.0.0.1:8802/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-x","messages":[{"role":"user","content":"Summarise this report."}]}'
+```
+
+- The response body is the upstream's response, byte-for-byte; the local decision is attached only as the `X-Preclassifier-Decision` response header, so existing OpenAI SDK clients keep working unchanged.
+- `available_tools` and `policy_flags` may be included in the request to inform classification; both are stripped before forwarding, since upstream chat completions APIs don't know them.
+- The upstream API key is operator-configured server-side and is never accepted from the caller.
+- Streaming (`stream: true`) is not supported yet — the upstream call is always non-streaming.
+- This mode does not change routing decisions or pick a model on the caller's behalf; it forwards whatever `model` the client already requested. Use `model_recommendations` (from the `X-Preclassifier-Decision` header) to inform your own client-side model choice.
 
 ## 🎯 ACCURACY EVALUATION
 
