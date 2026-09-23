@@ -11,6 +11,15 @@ All notable changes to this project are documented here.
 - Loopback-bound hardened Docker Compose configuration.
 - Request limits, production credential enforcement, metadata-only optional decision logs, and security/privacy documentation.
 - Interactive GitHub Pages launch site.
+- `mixed_signals` reason with reduced confidence when several task categories match.
+
+### Fixed
+
+- Cache key now covers `policy_flags`, `available_tools` and full tool history, so a cached `route` can no longer mask a `high_stakes` escalation.
+- Chunked request bodies are size-checked while being read instead of after full buffering.
+- Settings read environment variables at construction, and importing `llm_preclassifier.api` no longer builds an app (Docker uses `uvicorn --factory`).
+- `/status` reports all counters, including zeros.
+- Narrowed coding and `send` patterns that misclassified everyday requests.
 
 ### Known limitations
 

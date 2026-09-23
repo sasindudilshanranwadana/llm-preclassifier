@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir .
 FROM base AS runtime
 USER app
 EXPOSE 8802
-CMD ["uvicorn", "llm_preclassifier.api:app", "--host", "0.0.0.0", "--port", "8802", "--no-access-log"]
+CMD ["uvicorn", "--factory", "llm_preclassifier.api:create_app", "--host", "0.0.0.0", "--port", "8802", "--no-access-log"]

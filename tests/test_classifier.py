@@ -51,3 +51,30 @@ def test_explicit_agent_action_requires_tools():
     assert result.task_type == "agent_action"
     assert result.tool_requirement == "required"
     assert result.recommended_model_tier == "capable"
+
+
+def test_everyday_words_do_not_trigger_coding():
+    assert decision("Help me organise my class schedule for next semester.").task_type != "coding"
+    assert decision("Can you explain how a driving test is scored?").task_type != "coding"
+
+
+def test_send_alone_does_not_require_tools():
+    result = decision("Send my regards in this thank-you note draft.")
+
+    assert result.task_type == "writing"
+    assert result.tool_requirement == "none"
+
+
+def test_send_email_is_an_agent_action():
+    result = decision("Send an email to the team about the outage.")
+
+    assert result.task_type == "agent_action"
+    assert result.tool_requirement == "required"
+
+
+def test_competing_signals_lower_confidence():
+    clear = decision("Extract the invoice number from this email.")
+    mixed = decision("Research competitors, write a draft, and summarise the key points.")
+
+    assert mixed.confidence < clear.confidence
+    assert "mixed_signals" in mixed.reasons

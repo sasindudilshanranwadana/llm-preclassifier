@@ -1,5 +1,5 @@
 """Runtime configuration for llm-preclassifier."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 
 
@@ -12,14 +12,14 @@ class Settings:
     decision metadata only.
     """
 
-    environment: str = os.getenv("LLM_PRECLASSIFIER_ENV", "development")
-    client_api_keys: str = os.getenv("CLIENT_API_KEYS", "")
-    max_request_bytes: int = int(os.getenv("MAX_REQUEST_BYTES", "65536"))
-    max_messages: int = int(os.getenv("MAX_MESSAGES", "32"))
-    cache_ttl_seconds: float = float(os.getenv("CACHE_TTL_SECONDS", "300"))
-    cache_max_entries: int = int(os.getenv("CACHE_MAX_ENTRIES", "1024"))
-    log_decisions: bool = os.getenv("LOG_DECISIONS", "false").lower() == "true"
-    decision_log_path: str = os.getenv("DECISION_LOG_PATH", "")
+    environment: str = field(default_factory=lambda: os.getenv("LLM_PRECLASSIFIER_ENV", "development"))
+    client_api_keys: str = field(default_factory=lambda: os.getenv("CLIENT_API_KEYS", ""))
+    max_request_bytes: int = field(default_factory=lambda: int(os.getenv("MAX_REQUEST_BYTES", "65536")))
+    max_messages: int = field(default_factory=lambda: int(os.getenv("MAX_MESSAGES", "32")))
+    cache_ttl_seconds: float = field(default_factory=lambda: float(os.getenv("CACHE_TTL_SECONDS", "300")))
+    cache_max_entries: int = field(default_factory=lambda: int(os.getenv("CACHE_MAX_ENTRIES", "1024")))
+    log_decisions: bool = field(default_factory=lambda: os.getenv("LOG_DECISIONS", "false").lower() == "true")
+    decision_log_path: str = field(default_factory=lambda: os.getenv("DECISION_LOG_PATH", ""))
 
     @property
     def api_keys(self) -> tuple[str, ...]:

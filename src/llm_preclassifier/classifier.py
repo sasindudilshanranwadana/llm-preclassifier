@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 from typing import Iterable
 
 from llm_preclassifier.schemas import ClassificationDecision, Message
@@ -16,12 +15,13 @@ _HIGH_STAKES = re.compile(
 _TOOL_ACTION = re.compile(
     r"\b(?:search (?:the )?web|browse|look up|read (?:the )?(?:file|repository|repo)|"
     r"run (?:the )?(?:test|command)|execute|deploy|create (?:a )?(?:file|issue|pull request)|"
-    r"edit (?:the )?(?:file|config)|send|upload|download)\b",
+    r"edit (?:the )?(?:file|config)|send (?:an? |the )?(?:email|message|slack|request|invite)|upload|download)\b",
     re.IGNORECASE,
 )
 _CODING = re.compile(
-    r"\b(?:code|coding|bug|test(?:s| suite)?|repository|repo|function|class|api|"
-    r"python|javascript|typescript|docker|implement|refactor|debug|fix)\b",
+    r"\b(?:code|coding|bugs?|(?:unit|failing|integration) tests?|test suite|repository|repo|"
+    r"function|class(?:es)? (?:method|definition)|api|python|javascript|typescript|docker|"
+    r"implement|refactor|debug|stack trace|compile)\b",
     re.IGNORECASE,
 )
 _EXTRACTION = re.compile(r"\b(?:extract|parse|pull out|find the)\b", re.IGNORECASE)
@@ -100,7 +100,17 @@ def classify(messages: list[Message | dict], metadata: dict | None = None) -> Cl
         tier = "standard"
 
     confidence = 0.88 if task_type not in {"chat", "classification"} else 0.65
+    if _competing_categories(latest) > 1:
+        confidence = min(confidence, 0.7)
+        reasons.append("mixed_signals")
     return _decision(task_type, complexity, tool_requirement, tier, confidence, "route", reasons)
+
+
+_CATEGORY_PATTERNS = (_CODING, _EXTRACTION, _SUMMARIZATION, _WRITING, _RESEARCH, _PLANNING)
+
+
+def _competing_categories(text: str) -> int:
+    return sum(1 for pattern in _CATEGORY_PATTERNS if pattern.search(text))
 
 
 def _decision(task_type, complexity, tool_requirement, tier, confidence, action, reasons) -> ClassificationDecision:

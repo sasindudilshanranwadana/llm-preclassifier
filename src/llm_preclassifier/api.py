@@ -6,6 +6,7 @@ from collections import Counter
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from llm_preclassifier.audit import append_decision_log
 from llm_preclassifier.cache import ClassificationCache
@@ -13,6 +14,69 @@ from llm_preclassifier.classifier import classify
 from llm_preclassifier.config import Settings
 from llm_preclassifier.schemas import ClassificationDecision, ClassificationRequest, HealthResponse
 from llm_preclassifier.utils import _classification_cache_key
+
+_METRIC_NAMES = (
+    "classifications_total",
+    "classifications_computed",
+    "classifications_cache_hits",
+    "decision_logs_written",
+)
+
+
+class RequestSizeLimitMiddleware:
+    """Reject oversized bodies, never buffering more than max_bytes of a chunked upload."""
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        content_length = dict(scope["headers"]).get(b"content-length")
+        if content_length is not None:
+            try:
+                declared = int(content_length)
+            except ValueError:
+                await JSONResponse({"detail": "invalid content-length"}, status_code=400)(scope, receive, send)
+                return
+            if declared > self.max_bytes:
+                await _too_large()(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+
+        chunks: list[bytes] = []
+        received = 0
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] != "http.request":
+                return
+            chunk = message.get("body", b"")
+            received += len(chunk)
+            if received > self.max_bytes:
+                await _too_large()(scope, receive, send)
+                return
+            chunks.append(chunk)
+            more_body = message.get("more_body", False)
+
+        body = b"".join(chunks)
+        replayed = False
+
+        async def replay_receive() -> Message:
+            nonlocal replayed
+            if replayed:
+                return await receive()
+            replayed = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        await self.app(scope, replay_receive, send)
+
+
+def _too_large() -> JSONResponse:
+    return JSONResponse({"detail": "request body exceeds MAX_REQUEST_BYTES"}, status_code=413)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,23 +93,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_entries=settings.cache_max_entries,
         ttl_seconds=settings.cache_ttl_seconds,
     )
-    metrics: Counter[str] = Counter()
+    metrics: Counter[str] = Counter({name: 0 for name in _METRIC_NAMES})
 
-    @app.middleware("http")
-    async def enforce_request_size(request: Request, call_next):
-        content_length = request.headers.get("content-length")
-        if content_length:
-            try:
-                exceeds_limit = int(content_length) > settings.max_request_bytes
-            except ValueError:
-                return JSONResponse({"detail": "invalid content-length"}, status_code=400)
-            if exceeds_limit:
-                return JSONResponse({"detail": "request body exceeds MAX_REQUEST_BYTES"}, status_code=413)
-        elif request.method in {"POST", "PUT", "PATCH"}:
-            body = await request.body()
-            if len(body) > settings.max_request_bytes:
-                return JSONResponse({"detail": "request body exceeds MAX_REQUEST_BYTES"}, status_code=413)
-        return await call_next(request)
+    app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_bytes)
 
     def authenticate(request: Request) -> None:
         if not settings.api_keys:
@@ -68,7 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if len(payload.messages) > settings.max_messages:
             raise HTTPException(status_code=422, detail="messages exceeds MAX_MESSAGES")
         messages = [message.model_dump() for message in payload.messages]
-        cache_key = _classification_cache_key(messages)
+        cache_key = _classification_cache_key(messages, payload.available_tools, payload.policy_flags)
         decision = cache.get(cache_key)
         if decision is None:
             decision = classify(messages, {
@@ -95,6 +145,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return dict(metrics)
 
     return app
-
-
-app = create_app()
