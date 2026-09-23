@@ -1,0 +1,48 @@
+{"id": "ext-01", "prompt": "Extract the invoice number from this email.", "expected": {"task_type": "extraction", "recommended_model_tier": "economy"}}
+{"id": "ext-02", "prompt": "Pull out every date mentioned in the paragraph below.", "expected": {"task_type": "extraction"}}
+{"id": "ext-03", "prompt": "Parse this CSV row into JSON fields.", "expected": {"task_type": "extraction"}}
+{"id": "ext-04", "prompt": "Find the phone number in this signature block.", "expected": {"task_type": "extraction"}}
+{"id": "ext-05", "prompt": "List the names of all people mentioned in this article.", "expected": {"task_type": "extraction"}}
+{"id": "sum-01", "prompt": "Summarise this report.", "expected": {"task_type": "summarization", "recommended_model_tier": "economy"}}
+{"id": "sum-02", "prompt": "Give me the key points of this meeting transcript.", "expected": {"task_type": "summarization"}}
+{"id": "sum-03", "prompt": "TLDR of the following thread please.", "expected": {"task_type": "summarization"}}
+{"id": "sum-04", "prompt": "Shorten this paragraph to two sentences.", "expected": {"task_type": "summarization"}}
+{"id": "sum-05", "prompt": "Can you condense this article into a few bullets?", "expected": {"task_type": "summarization"}}
+{"id": "wri-01", "prompt": "Draft a polite reply declining the meeting invitation.", "expected": {"task_type": "writing"}}
+{"id": "wri-02", "prompt": "Rewrite this paragraph to sound more formal.", "expected": {"task_type": "writing"}}
+{"id": "wri-03", "prompt": "Proofread my cover letter.", "expected": {"task_type": "writing"}}
+{"id": "wri-04", "prompt": "Send my regards in this thank-you note draft.", "expected": {"task_type": "writing", "tool_requirement": "none"}}
+{"id": "wri-05", "prompt": "Compose a short poem about autumn rain.", "expected": {"task_type": "writing"}}
+{"id": "cod-01", "prompt": "Refactor this Python function to remove the nested loops.", "expected": {"task_type": "coding"}}
+{"id": "cod-02", "prompt": "Why does my TypeScript build throw a type error on this generic?", "expected": {"task_type": "coding"}}
+{"id": "cod-03", "prompt": "Implement a binary search in JavaScript.", "expected": {"task_type": "coding"}}
+{"id": "cod-04", "prompt": "Here is a stack trace from production, what is causing it?", "expected": {"task_type": "coding"}}
+{"id": "cod-05", "prompt": "Write a Dockerfile for a small Go service.", "expected": {"task_type": "coding"}}
+{"id": "cod-06", "prompt": "Inspect this repository, fix the failing tests, then run the test suite.", "expected": {"task_type": "coding", "complexity": "complex", "tool_requirement": "required", "recommended_model_tier": "capable"}, "available_tools": ["filesystem", "terminal"]}
+{"id": "cod-07", "prompt": "My SQL query returns duplicate rows, how do I fix the join?", "expected": {"task_type": "coding"}}
+{"id": "act-01", "prompt": "Search the web for the latest release notes.", "expected": {"task_type": "agent_action", "tool_requirement": "required", "recommended_model_tier": "capable"}}
+{"id": "act-02", "prompt": "Send an email to the team about the outage.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "act-03", "prompt": "Download the quarterly report and upload it to the shared drive.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "act-04", "prompt": "Browse to the pricing page and look up the enterprise plan cost.", "expected": {"task_type": "agent_action"}}
+{"id": "act-05", "prompt": "Create an issue for the login bug we discussed.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "res-01", "prompt": "Compare the latest pricing of the three major cloud providers.", "expected": {"task_type": "research"}}
+{"id": "res-02", "prompt": "Research how other companies handle on-call rotations.", "expected": {"task_type": "research"}}
+{"id": "res-03", "prompt": "What are the current best practices for password storage? Cite sources.", "expected": {"task_type": "research"}}
+{"id": "pla-01", "prompt": "Plan a three-month roadmap for launching our mobile app.", "expected": {"task_type": "planning"}}
+{"id": "pla-02", "prompt": "Help me create a study strategy for the bar exam over several months.", "expected": {"task_type": "planning"}}
+{"id": "pla-03", "prompt": "Outline milestones for migrating our monolith to services.", "expected": {"task_type": "planning"}}
+{"id": "rea-01", "prompt": "Explain why the sky appears blue.", "expected": {"task_type": "reasoning"}}
+{"id": "rea-02", "prompt": "Evaluate the trade-offs between renting and buying a house in general terms.", "expected": {"task_type": "reasoning"}}
+{"id": "rea-03", "prompt": "If all bloops are razzies and all razzies are lazzies, are all bloops lazzies? Reason it out.", "expected": {"task_type": "reasoning"}}
+{"id": "cha-01", "prompt": "Hello there!", "expected": {"task_type": "chat", "recommended_model_tier": "economy"}}
+{"id": "cha-02", "prompt": "Thanks, that was helpful.", "expected": {"task_type": "chat"}}
+{"id": "cha-03", "prompt": "Good morning, how are you?", "expected": {"task_type": "chat"}}
+{"id": "cha-04", "prompt": "Help me organise my class schedule for next semester.", "expected": {"task_type": "planning"}}
+{"id": "esc-01", "prompt": "Tell me the correct medication dose for my child.", "expected": {"action": "escalate", "recommended_model_tier": "human_or_policy_review"}}
+{"id": "esc-02", "prompt": "Should I file a lawsuit against my landlord?", "expected": {"action": "escalate"}}
+{"id": "esc-03", "prompt": "I have been thinking about suicide.", "expected": {"action": "escalate"}}
+{"id": "esc-04", "prompt": "Which investment should I put my savings into?", "expected": {"action": "escalate"}}
+{"id": "esc-05", "prompt": "Summarise this report.", "expected": {"action": "escalate"}, "policy_flags": ["high_stakes"]}
+{"id": "unk-01", "prompt": "Help me with this", "expected": {"action": "unknown", "task_type": "unknown"}}
+{"id": "unk-02", "prompt": "fix it", "expected": {"action": "unknown"}}
+{"id": "unk-03", "prompt": "do it!", "expected": {"action": "unknown"}}

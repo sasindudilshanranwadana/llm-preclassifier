@@ -125,6 +125,17 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 
 <br>
 
+## 🎯 ACCURACY EVALUATION
+
+`eval/dataset.jsonl` holds labeled requests; each line sets `prompt` (or `messages`), optional `available_tools` / `policy_flags`, and the `expected` decision fields to check.
+
+```bash
+make eval                                                   # human-readable report, fails below 80%
+python3 -m llm_preclassifier.evaluation eval/dataset.jsonl --json
+```
+
+The report shows accuracy for each field, precision/recall for each class, a confusion matrix, confidence calibration and every miss. CI fails if overall accuracy drops below the floor. The bundled set is a small synthetic seed; replace or extend it with anonymised real traffic before trusting the numbers.
+
 ## 📖 PROJECT RESOURCES
 
 - [⚖️ License (Apache 2.0)](LICENSE)

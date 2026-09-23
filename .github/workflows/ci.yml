@@ -24,6 +24,8 @@ jobs:
 
       - name: Test
         run: python -m pytest tests -v
+      - name: Accuracy gate
+        run: python -m llm_preclassifier.evaluation eval/dataset.jsonl --min-accuracy 0.8
 
   docker:
     runs-on: ubuntu-latest

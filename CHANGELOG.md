@@ -11,6 +11,7 @@ All notable changes to this project are documented here.
 - Loopback-bound hardened Docker Compose configuration.
 - Request limits, production credential enforcement, metadata-only optional decision logs, and security/privacy documentation.
 - Interactive GitHub Pages launch site.
+- Offline accuracy evaluation (`python -m llm_preclassifier.evaluation`) with per-class precision/recall, confusion matrix, calibration buckets, a 48-case seed dataset and a CI accuracy gate.
 - `mixed_signals` reason with reduced confidence when several task categories match.
 
 ### Fixed
