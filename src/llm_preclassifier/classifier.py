@@ -2,34 +2,67 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 from typing import Iterable
 
 from llm_preclassifier.schemas import ClassificationDecision, Message
 from llm_preclassifier.utils import _flatten_text, _has_tool_history
 
 _HIGH_STAKES = re.compile(
-    r"\b(?:diagnos(?:e|is)|medication|dose|prescription|medical|suicide|self-harm|"
-    r"legal advice|lawsuit|contract dispute|tax return|financial advice|invest(?:ment|ing))\b",
+    r"\b(?:diagnos(?:e|is)|medications?|dos(?:e|es|age|ing)|overdos(?:e|ing)|prescriptions?|medical|"
+    r"suicid(?:e|al)|self[- ]harm|(?:hurt|harm|kill) (?:myself|themselves|himself|herself)|"
+    r"legal advice|lawsuits?|contract dispute|tax return|financial advice|invest(?:ment|ments|ing)?)\b",
     re.IGNORECASE,
 )
-_TOOL_ACTION = re.compile(
-    r"\b(?:search (?:the )?web|browse|look up|read (?:the )?(?:file|repository|repo)|"
-    r"run (?:the )?(?:test|command)|execute|deploy|create (?:a )?(?:file|issue|pull request)|"
-    r"edit (?:the )?(?:file|config)|send|upload|download)\b",
+# Actions on systems outside the workspace; these win over coding vocabulary.
+_EXTERNAL_ACTION = re.compile(
+    r"\b(?:search (?:the )?web|browse|look up|"
+    r"(?:create|open|file|raise) (?:an? |the )?(?:issue|ticket|pull request|pr)|"
+    r"send (?:an? |the )?(?:email|message|slack|request|invite)|"
+    r"(?:schedule|book) (?:an? )?(?:meeting|call|appointment)|upload|download)\b",
+    re.IGNORECASE,
+)
+# Actions inside the workspace; combined with coding vocabulary they stay coding.
+_WORKSPACE_ACTION = re.compile(
+    r"\b(?:read (?:the )?(?:file|repository|repo)|run (?:the )?(?:tests?|test suite|command)|"
+    r"execute|deploy|create (?:an? )?file|edit (?:the )?(?:file|config))\b",
     re.IGNORECASE,
 )
 _CODING = re.compile(
-    r"\b(?:code|coding|bug|test(?:s| suite)?|repository|repo|function|class|api|"
-    r"python|javascript|typescript|docker|implement|refactor|debug|fix)\b",
+    r"\b(?:code|coding|bugs?|(?:unit|failing|integration) tests?|test suite|repository|repo|"
+    r"function|class(?:es)? (?:method|definition)|api|python|javascript|typescript|bash|"
+    r"powershell|golang|go service|sql|c\+\+|c program|docker(?:file)?|regex|"
+    r"segfault|implement|refactor|debug|stack trace|compile)\b",
     re.IGNORECASE,
 )
-_EXTRACTION = re.compile(r"\b(?:extract|parse|pull out|find the)\b", re.IGNORECASE)
-_SUMMARIZATION = re.compile(r"\b(?:summari[sz]e|tldr|shorten|key points)\b", re.IGNORECASE)
-_WRITING = re.compile(r"\b(?:write|draft|rewrite|proofread|edit this text)\b", re.IGNORECASE)
-_RESEARCH = re.compile(r"\b(?:research|compare|latest|current|source|citation)\b", re.IGNORECASE)
-_PLANNING = re.compile(r"\b(?:plan|roadmap|milestone|strategy|architecture)\b", re.IGNORECASE)
-_REASONING = re.compile(r"\b(?:analyse|analyze|reason|explain|evaluate|why|trade-?off)\b", re.IGNORECASE)
+_EXTRACTION = re.compile(
+    r"\b(?:extract|parse|pull out|grab|identify|find the|list (?:all|the|every)(?: \w+)? "
+    r"(?:names?|dates?|emails?|items?|numbers?|people|companies))\b",
+    re.IGNORECASE,
+)
+_SUMMARIZATION = re.compile(
+    r"\b(?:summari[sz](?:e|ing)|tl;?dr|shorten|condense|boil (?:this|it)?(?: \w+){0,2} down|sum up|"
+    r"key points|gist)\b",
+    re.IGNORECASE,
+)
+_WRITING = re.compile(
+    r"\b(?:write|draft|rewrite|compose|proofread|edit (?:this|my) (?:text|essay|letter)|"
+    r"poem|haiku|essay|story|lyrics|cover letter)\b",
+    re.IGNORECASE,
+)
+_RESEARCH = re.compile(r"\b(?:research|compare|latest|current|sources?|citations?|cite)\b", re.IGNORECASE)
+_PLANNING = re.compile(
+    r"\b(?:plan|project plan|roadmaps?|milestones?|itinerary|strateg(?:y|ies)|architecture|"
+    r"organi[sz]e (?:my|our|the))\b",
+    re.IGNORECASE,
+)
+_REASONING = re.compile(
+    r"\b(?:analy[sz]e|reason|explain|evaluate|why|trade-?offs?|pros and cons)\b", re.IGNORECASE,
+)
+_CHAT = re.compile(
+    r"^(?:hi|hey|hello|yo|thanks|thank you|cheers|good (?:morning|afternoon|evening)|"
+    r"how are you|what'?s up)\b",
+    re.IGNORECASE,
+)
 _MULTI_STEP = re.compile(r"\b(?:then|after that|and then|end[- ]to[- ]end|multiple|several|all of)\b", re.IGNORECASE)
 _AMBIGUOUS = re.compile(r"^(?:help me(?: with this)?|fix it|do it|please help)[.!?\s]*$", re.IGNORECASE)
 
@@ -56,15 +89,17 @@ def classify(messages: list[Message | dict], metadata: dict | None = None) -> Cl
             "escalate", ["high_stakes_signal"],
         )
 
-    requires_tools = bool(_TOOL_ACTION.search(latest))
+    external_action = bool(_EXTERNAL_ACTION.search(latest))
+    requires_tools = external_action or bool(_WORKSPACE_ACTION.search(latest))
     tool_requirement = "required" if requires_tools else ("optional" if has_tools else "none")
     reasons: list[str] = ["offline_rules_v1"]
     if requires_tools:
         reasons.append("tool_required")
 
-    if _TOOL_ACTION.search(latest) and not _CODING.search(latest):
+    coding = bool(_CODING.search(latest))
+    if external_action or (requires_tools and not coding):
         task_type = "agent_action"
-    elif _CODING.search(latest):
+    elif coding:
         task_type = "coding"
     elif _EXTRACTION.search(latest):
         task_type = "extraction"
@@ -76,8 +111,6 @@ def classify(messages: list[Message | dict], metadata: dict | None = None) -> Cl
         task_type = "planning"
     elif _WRITING.search(latest):
         task_type = "writing"
-    elif _TOOL_ACTION.search(latest):
-        task_type = "agent_action"
     elif _REASONING.search(latest):
         task_type = "reasoning"
     elif len(latest.split()) <= 12:
@@ -99,8 +132,25 @@ def classify(messages: list[Message | dict], metadata: dict | None = None) -> Cl
     else:
         tier = "standard"
 
-    confidence = 0.88 if task_type not in {"chat", "classification"} else 0.65
+    if task_type == "chat" and _CHAT.match(latest):
+        confidence = 0.85
+    elif task_type in {"chat", "classification"}:
+        confidence = _FALLBACK_CONFIDENCE
+        reasons.append("no_category_signal")
+    else:
+        confidence = 0.88
+    if _competing_categories(latest) > 1:
+        confidence = min(confidence, 0.7)
+        reasons.append("mixed_signals")
     return _decision(task_type, complexity, tool_requirement, tier, confidence, "route", reasons)
+
+
+_FALLBACK_CONFIDENCE = 0.5
+_CATEGORY_PATTERNS = (_CODING, _EXTRACTION, _SUMMARIZATION, _WRITING, _RESEARCH, _PLANNING)
+
+
+def _competing_categories(text: str) -> int:
+    return sum(1 for pattern in _CATEGORY_PATTERNS if pattern.search(text))
 
 
 def _decision(task_type, complexity, tool_requirement, tier, confidence, action, reasons) -> ClassificationDecision:

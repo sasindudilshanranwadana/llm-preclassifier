@@ -67,3 +67,71 @@ def test_request_size_limit_rejects_large_bodies():
     response = limited.post("/v1/classify", content=b"x" * 1025, headers={"content-type": "application/json"})
 
     assert response.status_code == 413
+
+
+def test_policy_flags_are_not_masked_by_cached_decision():
+    api = client()
+    messages = [{"role": "user", "content": "Summarise this report."}]
+
+    first = api.post("/v1/classify", json={"messages": messages})
+    flagged = api.post("/v1/classify", json={"messages": messages, "policy_flags": ["high_stakes"]})
+
+    assert first.json()["action"] == "route"
+    assert flagged.json()["action"] == "escalate"
+
+
+def test_available_tools_are_part_of_cache_identity():
+    api = client()
+    messages = [{"role": "user", "content": "Explain why this design is slow."}]
+
+    without_tools = api.post("/v1/classify", json={"messages": messages})
+    with_tools = api.post("/v1/classify", json={"messages": messages, "available_tools": ["terminal"]})
+
+    assert without_tools.json()["tool_requirement"] == "none"
+    assert with_tools.json()["tool_requirement"] == "optional"
+
+
+def test_tool_history_outside_recent_turns_is_part_of_cache_identity():
+    api = client()
+    tail = [{"role": "user", "content": f"note {index}"} for index in range(5)]
+    tail.append({"role": "user", "content": "Explain why this design is slow."})
+    with_history = [{"role": "assistant", "tool_calls": [{"id": "1"}]}, *tail]
+
+    plain = api.post("/v1/classify", json={"messages": tail})
+    historic = api.post("/v1/classify", json={"messages": with_history})
+
+    assert plain.json()["tool_requirement"] == "none"
+    assert historic.json()["tool_requirement"] == "optional"
+
+
+def test_chunked_body_over_limit_is_rejected():
+    limited = client(max_request_bytes=1024)
+
+    response = limited.post(
+        "/v1/classify",
+        content=iter([b"x" * 600, b"x" * 600]),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 413
+
+
+def test_chunked_body_within_limit_is_classified():
+    body = b'{"messages":[{"role":"user","content":"Summarise this report."}]}'
+
+    response = client().post("/v1/classify", content=iter([body[:20], body[20:]]),
+                             headers={"content-type": "application/json"})
+
+    assert response.status_code == 200
+    assert response.json()["task_type"] == "summarization"
+
+
+def test_status_reports_zero_counters_before_traffic():
+    response = client().get("/status")
+
+    assert response.json() == {
+        "classifications_total": 0,
+        "classifications_computed": 0,
+        "classifications_cache_hits": 0,
+        "decision_logs_written": 0,
+    }

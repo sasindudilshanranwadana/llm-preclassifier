@@ -22,11 +22,18 @@ def _has_tool_history(messages: list[Dict[str, Any]]) -> bool:
             return True
     return False
 
-def _classification_cache_key(messages: list[Dict[str, Any]], max_turns: int = 5) -> str:
-    """Generate a stable SHA-256 key for a message history slice."""
+def _classification_cache_key(
+    messages: list[Dict[str, Any]],
+    available_tools: list[str] | None = None,
+    policy_flags: list[str] | None = None,
+    max_turns: int = 5,
+) -> str:
+    """Generate a stable SHA-256 key covering every input that affects the decision."""
     relevant = messages[-max_turns:]
-    canonical = json.dumps([
-        {"r": m.get("role"), "c": _flatten_text(m.get("content", ""))} 
-        for m in relevant
-    ], separators=(",", ":"), sort_keys=True)
+    canonical = json.dumps({
+        "m": [{"r": m.get("role"), "c": _flatten_text(m.get("content", ""))} for m in relevant],
+        "h": _has_tool_history(messages),
+        "t": sorted(set(available_tools or [])),
+        "p": sorted(set(policy_flags or [])),
+    }, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

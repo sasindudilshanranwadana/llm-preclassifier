@@ -24,6 +24,12 @@ jobs:
 
       - name: Test
         run: python -m pytest tests -v
+      - name: Accuracy gate
+        run: |
+          python -m llm_preclassifier.evaluation eval/dataset.jsonl --min-accuracy 0.95
+          python -m llm_preclassifier.evaluation eval/holdout.jsonl --min-accuracy 0.95
+      - name: Blind benchmark (report only)
+        run: python -m llm_preclassifier.evaluation eval/blind.jsonl
 
   docker:
     runs-on: ubuntu-latest

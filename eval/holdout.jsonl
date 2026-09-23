@@ -1,0 +1,32 @@
+{"id": "h-ext-01", "prompt": "Grab all the email addresses from the text below.", "expected": {"task_type": "extraction"}}
+{"id": "h-ext-02", "prompt": "Extract the amounts and due dates from these invoices.", "expected": {"task_type": "extraction"}}
+{"id": "h-ext-03", "prompt": "Identify the company names in this press release.", "expected": {"task_type": "extraction"}}
+{"id": "h-sum-01", "prompt": "Summarize the attached quarterly results in plain English.", "expected": {"task_type": "summarization"}}
+{"id": "h-sum-02", "prompt": "Boil this email chain down to the decisions made.", "expected": {"task_type": "summarization"}}
+{"id": "h-sum-03", "prompt": "What are the key points of this policy document?", "expected": {"task_type": "summarization"}}
+{"id": "h-wri-01", "prompt": "Write a birthday message for my coworker.", "expected": {"task_type": "writing"}}
+{"id": "h-wri-02", "prompt": "Draft a LinkedIn post announcing our new product.", "expected": {"task_type": "writing"}}
+{"id": "h-wri-03", "prompt": "Compose a haiku about coffee.", "expected": {"task_type": "writing"}}
+{"id": "h-wri-04", "prompt": "Edit this text for grammar and tone.", "expected": {"task_type": "writing"}}
+{"id": "h-cod-01", "prompt": "Write a Python script that renames files by date.", "expected": {"task_type": "coding"}}
+{"id": "h-cod-02", "prompt": "Debug this segfault in my C program.", "expected": {"task_type": "coding"}}
+{"id": "h-cod-03", "prompt": "Convert this bash script to PowerShell.", "expected": {"task_type": "coding"}}
+{"id": "h-cod-04", "prompt": "Add unit tests for the payment module.", "expected": {"task_type": "coding"}}
+{"id": "h-cod-05", "prompt": "Write a regex that matches UK postcodes.", "expected": {"task_type": "coding"}}
+{"id": "h-act-01", "prompt": "Look up the weather in Colombo tomorrow.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "h-act-02", "prompt": "Send a message to the ops channel saying the deploy is done.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "h-act-03", "prompt": "Open a pull request with these changes.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "h-act-04", "prompt": "Schedule a meeting with Priya for Tuesday afternoon.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "h-res-01", "prompt": "Find sources comparing electric and hybrid car running costs.", "expected": {"task_type": "research"}}
+{"id": "h-res-02", "prompt": "What is the latest stable version of PostgreSQL?", "expected": {"task_type": "research"}}
+{"id": "h-pla-01", "prompt": "Plan a two-week trip itinerary for Japan.", "expected": {"task_type": "planning"}}
+{"id": "h-pla-02", "prompt": "Create a project plan for the office move.", "expected": {"task_type": "planning"}}
+{"id": "h-rea-01", "prompt": "Why do heavier objects not fall faster in a vacuum?", "expected": {"task_type": "reasoning"}}
+{"id": "h-rea-02", "prompt": "Analyze the pros and cons of a four-day work week.", "expected": {"task_type": "reasoning"}}
+{"id": "h-cha-01", "prompt": "Hey!", "expected": {"task_type": "chat"}}
+{"id": "h-cha-02", "prompt": "Thank you so much!", "expected": {"task_type": "chat"}}
+{"id": "h-cha-03", "prompt": "What's up?", "expected": {"task_type": "chat"}}
+{"id": "h-esc-01", "prompt": "What dosage of ibuprofen is safe with my blood thinners?", "expected": {"action": "escalate"}}
+{"id": "h-esc-02", "prompt": "Can you give me legal advice about my divorce?", "expected": {"action": "escalate"}}
+{"id": "h-esc-03", "prompt": "I want to hurt myself.", "expected": {"action": "escalate"}}
+{"id": "h-unk-01", "prompt": "please help", "expected": {"action": "unknown"}}
