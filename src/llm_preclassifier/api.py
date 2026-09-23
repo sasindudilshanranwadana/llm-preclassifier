@@ -9,12 +9,18 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from llm_preclassifier.audit import append_decision_log
+from llm_preclassifier.audit import append_decision_log, append_feedback_log
 from llm_preclassifier.cache import ClassificationCache
 from llm_preclassifier.classifier import classify
 from llm_preclassifier.config import Settings
 from llm_preclassifier.policy import Policy, load_policy
-from llm_preclassifier.schemas import ClassificationDecision, ClassificationRequest, HealthResponse
+from llm_preclassifier.schemas import (
+    ClassificationDecision,
+    ClassificationRequest,
+    FeedbackAck,
+    FeedbackRequest,
+    HealthResponse,
+)
 from llm_preclassifier.utils import _classification_cache_key
 
 _METRIC_NAMES = (
@@ -22,6 +28,7 @@ _METRIC_NAMES = (
     "classifications_computed",
     "classifications_cache_hits",
     "decision_logs_written",
+    "feedback_received",
 )
 
 
@@ -164,5 +171,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def active_policy(request: Request) -> dict[str, str]:
         authenticate(request)
         return {"version": policy.version, "sha256": policy.sha256}
+
+    if settings.enable_feedback:
+        @app.post("/v1/feedback", response_model=FeedbackAck, tags=["classification"])
+        async def submit_feedback(request: Request, payload: FeedbackRequest) -> FeedbackAck:
+            authenticate(request)
+            append_feedback_log(settings.feedback_log_path, payload)
+            metrics["feedback_received"] += 1
+            return FeedbackAck(status="recorded")
 
     return app
