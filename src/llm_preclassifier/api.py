@@ -6,6 +6,7 @@ from collections import Counter
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from llm_preclassifier.audit import append_decision_log
@@ -79,6 +80,16 @@ def _too_large() -> JSONResponse:
     return JSONResponse({"detail": "request body exceeds MAX_REQUEST_BYTES"}, status_code=413)
 
 
+def _build_semantic(settings: Settings):
+    if not settings.semantic_model:
+        return None
+    try:
+        from llm_preclassifier.semantic import build_semantic_classifier
+    except ImportError as error:
+        raise RuntimeError("SEMANTIC_MODEL requires: pip install llm-preclassifier[semantic]") from error
+    return build_semantic_classifier(settings.semantic_model, settings.semantic_cache_dir)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     settings.validate()
@@ -93,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_entries=settings.cache_max_entries,
         ttl_seconds=settings.cache_ttl_seconds,
     )
+    semantic = _build_semantic(settings)
     metrics: Counter[str] = Counter({name: 0 for name in _METRIC_NAMES})
 
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_bytes)
@@ -121,10 +133,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cache_key = _classification_cache_key(messages, payload.available_tools, payload.policy_flags)
         decision = cache.get(cache_key)
         if decision is None:
-            decision = classify(messages, {
+            # Embedding is CPU-bound; keep it off the event loop.
+            decision = await run_in_threadpool(classify, messages, {
                 "available_tools": payload.available_tools,
                 "policy_flags": payload.policy_flags,
-            })
+            }, semantic=semantic)
             cache.put(cache_key, decision)
             metrics["classifications_computed"] += 1
         else:

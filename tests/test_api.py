@@ -135,3 +135,25 @@ def test_status_reports_zero_counters_before_traffic():
         "classifications_cache_hits": 0,
         "decision_logs_written": 0,
     }
+
+
+def test_semantic_layer_is_off_by_default():
+    assert Settings().semantic_model == ""
+
+
+def test_app_passes_semantic_classifier_to_classify(monkeypatch):
+    import llm_preclassifier.api as api
+
+    class AlwaysMedical:
+        def assess(self, text):
+            from llm_preclassifier.semantic import SemanticVerdict
+
+            return SemanticVerdict("medical", None, 0.0)
+
+    monkeypatch.setattr(api, "_build_semantic", lambda settings: AlwaysMedical())
+    response = TestClient(api.create_app(Settings(log_decisions=False))).post(
+        "/v1/classify", json={"messages": [{"role": "user", "content": "Summarise this report."}]},
+    )
+
+    assert response.json()["action"] == "escalate"
+    assert "semantic_high_stakes:medical" in response.json()["reasons"]

@@ -112,8 +112,10 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 | `CACHE_MAX_ENTRIES` | `1024` | Decision cache capacity (LRU). |
 | `LOG_DECISIONS` | `false` | Append decision metadata (never prompt content) as JSONL. |
 | `DECISION_LOG_PATH` | `""` | JSONL path; required when `LOG_DECISIONS=true`. |
+| `SEMANTIC_MODEL` | `""` | Embedding model for the semantic layer; empty disables it. Requires the `semantic` extra. |
+| `SEMANTIC_CACHE_DIR` | `""` | Where model weights are cached (`/opt/models` in the `runtime-semantic` image). |
 
-The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`).
+The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`). Docker Compose builds the `runtime-semantic` target; use `--target runtime` for the lean rules-only image.
 
 </details>
 
@@ -129,24 +131,41 @@ The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:c
 
 <br>
 
+## 🧠 SEMANTIC LAYER (OPTIONAL, OFFLINE)
+
+Keyword rules only catch the wording they were written for. The semantic layer embeds each request locally with [`BAAI/bge-small-en-v1.5`](https://huggingface.co/BAAI/bge-small-en-v1.5) (ONNX via `fastembed`, CPU-only, no PyTorch) and votes among the nearest labeled examples in [`data/exemplars.json`](src/llm_preclassifier/data/exemplars.json).
+
+- **Escalation is OR-ed:** a request escalates if the rules *or* the nearest examples indicate medical, legal, financial or self-harm risk (`semantic_high_stakes:<category>` reason).
+- **Task type:** the semantic vote is used only when the rules have no signal or conflicting signals (`semantic_task_vote` reason); clear rule matches still win.
+- **Private:** the model runs in-process and the `runtime-semantic` image bakes the weights in with `HF_HUB_OFFLINE=1`, so it works with `--network none`.
+- **Cost:** ~320 MiB RAM, ~630 MB image, ~50 req/s with 8 concurrent clients on a shared 6-vCPU VPS (unpinned).
+
+```bash
+pip install "llm-preclassifier[semantic]"
+SEMANTIC_MODEL=BAAI/bge-small-en-v1.5 uvicorn --factory llm_preclassifier.api:create_app
+```
+
 ## 🎯 ACCURACY EVALUATION
 
 Each JSONL line sets `prompt` (or `messages`), optional `available_tools` / `policy_flags`, and the `expected` decision fields to check.
 
-| Set | Cases | Role | Current |
-|---|---:|---|---:|
-| `eval/dataset.jsonl` | 48 | Regression, gated in CI at 95% | 100% |
-| `eval/holdout.jsonl` | 32 | Regression, gated in CI at 95% (rules were tuned after first run) | 100% |
-| `eval/blind.jsonl` | 24 | **Generalisation benchmark, never tune against it**, report only | 37.5% |
+| Set | Cases | Role | Rules only | Rules + semantic |
+|---|---:|---|---:|---:|
+| `eval/dataset.jsonl` | 48 | Regression, gated in CI at 95% | 100% | 100% |
+| `eval/holdout.jsonl` | 32 | Regression, gated in CI at 95% (rules were tuned after first run) | 100% | 100% |
+| `eval/blind.jsonl` | 24 | Blind benchmark, report only | 37.5% | 79.2% |
+| `eval/blind-v2.jsonl` | 30 | Blind benchmark written after exemplars were frozen, report only | 26.7% | **93.3%** |
+
+High-stakes escalation across both blind sets: **15/15 caught with the semantic layer** (5/15 with rules only), at the cost of 2 false escalations out of 8 benign look-alikes (`compound interest` → financial, `how a bill becomes law` → legal). The layer is biased towards escalating on purpose.
 
 ```bash
-make eval         # gated regression sets
-make eval-blind   # honest generalisation number
-python3 -m llm_preclassifier.evaluation eval/blind.jsonl --json
+make eval            # gated regression sets, rules only
+make eval-blind      # blind benchmarks, rules only
+make eval-semantic   # everything with the semantic layer (downloads the model once)
 ```
 
 > [!WARNING]
-> The blind set shows the keyword rules do not generalise: unseen phrasings of medical, legal and financial risk were **routed instead of escalated**. Do not rely on `escalate` as a safety control; treat it as a hint and keep provider-side safeguards in place.
+> With the rules-only default, unseen phrasings of medical, legal and financial risk are frequently **routed instead of escalated**. Run with the semantic layer (the default Docker Compose target) if you rely on `escalate`, and keep provider-side safeguards in place either way: these are small synthetic benchmarks, not a safety guarantee.
 
 Reports include accuracy for each field, precision and recall for each class, a confusion matrix, confidence calibration and every miss. All sets are synthetic; extend them with anonymised real traffic.
 

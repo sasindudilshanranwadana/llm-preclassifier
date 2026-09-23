@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
@@ -72,7 +73,7 @@ def _parse_case(raw: dict) -> EvalCase:
     )
 
 
-def evaluate(cases: list[EvalCase]) -> EvalReport:
+def evaluate(cases: list[EvalCase], semantic=None) -> EvalReport:
     field_hits: Counter[str] = Counter()
     field_totals: Counter[str] = Counter()
     confusion: dict[str, dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
@@ -84,7 +85,7 @@ def evaluate(cases: list[EvalCase]) -> EvalReport:
         decision = classify(case.messages, {
             "available_tools": case.available_tools,
             "policy_flags": case.policy_flags,
-        }).model_dump()
+        }, semantic=semantic).model_dump()
         case_correct = True
         for name, expected in case.expected.items():
             actual = decision[name]
@@ -163,9 +164,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("dataset", help="path to a JSONL dataset")
     parser.add_argument("--min-accuracy", type=float, default=0.0, help="fail if overall accuracy is below this")
     parser.add_argument("--json", action="store_true", help="print the full report as JSON")
+    parser.add_argument("--semantic", metavar="MODEL", help="enable the semantic layer with this embedding model")
     args = parser.parse_args(argv)
 
-    report = evaluate(load_dataset(args.dataset))
+    semantic = None
+    if args.semantic:
+        from llm_preclassifier.semantic import build_semantic_classifier
+
+        semantic = build_semantic_classifier(args.semantic, os.getenv("SEMANTIC_CACHE_DIR"))
+    report = evaluate(load_dataset(args.dataset), semantic)
     print(json.dumps(asdict(report), indent=2) if args.json else format_report(report))
     if report.overall_accuracy < args.min_accuracy:
         print(f"\nFAIL: overall accuracy {report.overall_accuracy:.1%} < {args.min_accuracy:.1%}", file=sys.stderr)

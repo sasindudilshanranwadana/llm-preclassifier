@@ -29,7 +29,27 @@ jobs:
           python -m llm_preclassifier.evaluation eval/dataset.jsonl --min-accuracy 0.95
           python -m llm_preclassifier.evaluation eval/holdout.jsonl --min-accuracy 0.95
       - name: Blind benchmark (report only)
-        run: python -m llm_preclassifier.evaluation eval/blind.jsonl
+        run: |
+          python -m llm_preclassifier.evaluation eval/blind.jsonl
+          python -m llm_preclassifier.evaluation eval/blind-v2.jsonl
+
+  semantic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package with semantic layer
+        run: pip install --no-cache-dir ".[semantic,dev]"
+
+      - name: Semantic unit tests
+        run: python -m pytest tests/test_semantic.py -v
+
+      - name: Semantic accuracy gate and blind benchmarks
+        run: make eval-semantic PYTHON=python
 
   docker:
     runs-on: ubuntu-latest
@@ -37,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build runtime image
-        run: docker build --target runtime -t llm-preclassifier:ci .
+        run: docker build --target runtime-semantic -t llm-preclassifier:ci .
 
       - name: Smoke test — healthz
         run: |

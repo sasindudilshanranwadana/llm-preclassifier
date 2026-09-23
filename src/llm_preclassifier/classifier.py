@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from llm_preclassifier.schemas import ClassificationDecision, Message
 from llm_preclassifier.utils import _flatten_text, _has_tool_history
+
+if TYPE_CHECKING:
+    from llm_preclassifier.semantic import SemanticClassifier
 
 _HIGH_STAKES = re.compile(
     r"\b(?:diagnos(?:e|is)|medications?|dos(?:e|es|age|ing)|overdos(?:e|ing)|prescriptions?|medical|"
@@ -74,7 +77,11 @@ def _latest_user_text(messages: Iterable[Message]) -> str:
     return ""
 
 
-def classify(messages: list[Message | dict], metadata: dict | None = None) -> ClassificationDecision:
+def classify(
+    messages: list[Message | dict],
+    metadata: dict | None = None,
+    semantic: SemanticClassifier | None = None,
+) -> ClassificationDecision:
     """Return an explainable decision without sending prompt content anywhere."""
     normalized = [message if isinstance(message, Message) else Message.model_validate(message) for message in messages]
     metadata = metadata or {}
@@ -83,68 +90,94 @@ def classify(messages: list[Message | dict], metadata: dict | None = None) -> Cl
 
     if not latest or _AMBIGUOUS.match(latest):
         return _decision("unknown", "unknown", "unknown", "unknown", 0.0, "unknown", ["insufficient_request_context"])
-    if _HIGH_STAKES.search(latest) or "high_stakes" in metadata.get("policy_flags", []):
+    verdict = semantic.assess(latest) if semantic else None
+    escalation_reasons = _escalation_reasons(latest, metadata, verdict)
+    if escalation_reasons:
         return _decision(
             "unknown", "unknown", "unknown", "human_or_policy_review", 0.5,
-            "escalate", ["high_stakes_signal"],
+            "escalate", escalation_reasons,
         )
 
     external_action = bool(_EXTERNAL_ACTION.search(latest))
     requires_tools = external_action or bool(_WORKSPACE_ACTION.search(latest))
-    tool_requirement = "required" if requires_tools else ("optional" if has_tools else "none")
     reasons: list[str] = ["offline_rules_v1"]
+    task_type = _rule_task_type(latest, external_action, requires_tools)
+    mixed = _competing_categories(latest) > 1
+    greeting = task_type == "chat" and bool(_CHAT.match(latest))
+
+    use_semantic = (
+        verdict is not None and verdict.task_type is not None and not greeting
+        and (task_type in {"chat", "classification"} or (mixed and verdict.task_share >= _SEMANTIC_OVERRIDE_SHARE))
+    )
+    if use_semantic:
+        task_type = verdict.task_type
+        requires_tools = requires_tools or task_type == "agent_action"
+        reasons.append("semantic_task_vote")
+    tool_requirement = "required" if requires_tools else ("optional" if has_tools else "none")
     if requires_tools:
         reasons.append("tool_required")
-
-    coding = bool(_CODING.search(latest))
-    if external_action or (requires_tools and not coding):
-        task_type = "agent_action"
-    elif coding:
-        task_type = "coding"
-    elif _EXTRACTION.search(latest):
-        task_type = "extraction"
-    elif _SUMMARIZATION.search(latest):
-        task_type = "summarization"
-    elif _RESEARCH.search(latest):
-        task_type = "research"
-    elif _PLANNING.search(latest):
-        task_type = "planning"
-    elif _WRITING.search(latest):
-        task_type = "writing"
-    elif _REASONING.search(latest):
-        task_type = "reasoning"
-    elif len(latest.split()) <= 12:
-        task_type = "chat"
-    else:
-        task_type = "classification"
 
     is_complex = bool(_MULTI_STEP.search(latest)) or (task_type == "coding" and requires_tools)
     complexity = "complex" if is_complex else "simple"
     if is_complex:
         reasons.append("multi_step_or_artifact_signal")
 
-    if task_type in {"coding", "agent_action"} and requires_tools:
-        tier = "capable"
-    elif task_type in {"reasoning", "planning", "research"} and is_complex:
-        tier = "reasoning"
-    elif task_type in {"extraction", "summarization", "classification", "chat"}:
-        tier = "economy"
-    else:
-        tier = "standard"
-
-    if task_type == "chat" and _CHAT.match(latest):
+    if use_semantic:
+        confidence = round(0.5 + 0.4 * verdict.task_share, 2)
+    elif greeting:
         confidence = 0.85
     elif task_type in {"chat", "classification"}:
         confidence = _FALLBACK_CONFIDENCE
         reasons.append("no_category_signal")
     else:
         confidence = 0.88
-    if _competing_categories(latest) > 1:
+    if mixed and not use_semantic:
         confidence = min(confidence, 0.7)
         reasons.append("mixed_signals")
-    return _decision(task_type, complexity, tool_requirement, tier, confidence, "route", reasons)
+    return _decision(task_type, complexity, tool_requirement, _tier(task_type, requires_tools, is_complex),
+                     confidence, "route", reasons)
 
 
+def _escalation_reasons(latest: str, metadata: dict, verdict) -> list[str]:
+    reasons = []
+    if _HIGH_STAKES.search(latest) or "high_stakes" in metadata.get("policy_flags", []):
+        reasons.append("high_stakes_signal")
+    if verdict is not None and verdict.risk_category:
+        reasons.append(f"semantic_high_stakes:{verdict.risk_category}")
+    return reasons
+
+
+def _rule_task_type(latest: str, external_action: bool, requires_tools: bool) -> str:
+    coding = bool(_CODING.search(latest))
+    if external_action or (requires_tools and not coding):
+        return "agent_action"
+    if coding:
+        return "coding"
+    for task_type, pattern in _ORDERED_CATEGORIES:
+        if pattern.search(latest):
+            return task_type
+    return "chat" if len(latest.split()) <= 12 else "classification"
+
+
+def _tier(task_type: str, requires_tools: bool, is_complex: bool) -> str:
+    if task_type in {"coding", "agent_action"} and requires_tools:
+        return "capable"
+    if task_type in {"reasoning", "planning", "research"} and is_complex:
+        return "reasoning"
+    if task_type in {"extraction", "summarization", "classification", "chat"}:
+        return "economy"
+    return "standard"
+
+
+_SEMANTIC_OVERRIDE_SHARE = 0.6
+_ORDERED_CATEGORIES = (
+    ("extraction", _EXTRACTION),
+    ("summarization", _SUMMARIZATION),
+    ("research", _RESEARCH),
+    ("planning", _PLANNING),
+    ("writing", _WRITING),
+    ("reasoning", _REASONING),
+)
 _FALLBACK_CONFIDENCE = 0.5
 _CATEGORY_PATTERNS = (_CODING, _EXTRACTION, _SUMMARIZATION, _WRITING, _RESEARCH, _PLANNING)
 

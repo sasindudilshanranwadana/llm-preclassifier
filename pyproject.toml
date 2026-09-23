@@ -22,9 +22,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+semantic = [
+  "fastembed==0.8.1",
+]
 dev = [
   "httpx==0.28.1",
   "pytest==8.3.5",
+  "numpy>=1.26",
 ]
 
 [project.urls]
@@ -39,3 +43,6 @@ addopts = "-q"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+llm_preclassifier = ["data/*.json"]

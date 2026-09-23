@@ -20,6 +20,8 @@ class Settings:
     cache_max_entries: int = field(default_factory=lambda: int(os.getenv("CACHE_MAX_ENTRIES", "1024")))
     log_decisions: bool = field(default_factory=lambda: os.getenv("LOG_DECISIONS", "false").lower() == "true")
     decision_log_path: str = field(default_factory=lambda: os.getenv("DECISION_LOG_PATH", ""))
+    semantic_model: str = field(default_factory=lambda: os.getenv("SEMANTIC_MODEL", ""))
+    semantic_cache_dir: str = field(default_factory=lambda: os.getenv("SEMANTIC_CACHE_DIR", ""))
 
     @property
     def api_keys(self) -> tuple[str, ...]:
