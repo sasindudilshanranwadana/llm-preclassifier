@@ -2,20 +2,21 @@
 from __future__ import annotations
 
 import hmac
-from collections import Counter
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from llm_preclassifier.audit import append_decision_log, append_feedback_log
-from llm_preclassifier.cache import ClassificationCache
+from llm_preclassifier.cache import ClassificationCache, RedisClassificationCache
 from llm_preclassifier.catalog import load_catalog
 from llm_preclassifier.classifier import classify
 from llm_preclassifier.config import Settings
+from llm_preclassifier.metrics import Metrics
 from llm_preclassifier.policy import Policy, load_policy
 from llm_preclassifier.proxy import UpstreamError, forward_chat_completion
+from llm_preclassifier.ratelimit import RateLimiter
 from llm_preclassifier.schemas import (
     ClassificationDecision,
     ClassificationRequest,
@@ -32,6 +33,7 @@ _METRIC_NAMES = (
     "decision_logs_written",
     "feedback_received",
     "proxy_requests_total",
+    "rate_limited_total",
 )
 _PROXY_ONLY_KEYS = ("available_tools", "policy_flags")
 
@@ -102,6 +104,29 @@ def _build_semantic(settings: Settings, policy: Policy):
     return build_semantic_classifier(settings.semantic_model, settings.semantic_cache_dir, policy)
 
 
+def _build_cache(settings: Settings) -> ClassificationCache[ClassificationDecision] | RedisClassificationCache:
+    if not settings.redis_url:
+        return ClassificationCache(max_entries=settings.cache_max_entries, ttl_seconds=settings.cache_ttl_seconds)
+    try:
+        import redis
+    except ImportError as error:
+        raise RuntimeError("REDIS_URL requires: pip install llm-preclassifier[redis]") from error
+    client = redis.Redis.from_url(settings.redis_url)
+    return RedisClassificationCache(
+        client,
+        settings.cache_ttl_seconds,
+        serialize=lambda decision: decision.model_dump_json(),
+        deserialize=ClassificationDecision.model_validate_json,
+    )
+
+
+def _rate_limit_key(request: Request) -> str:
+    authorization = request.headers.get("authorization", "")
+    if authorization.startswith("Bearer "):
+        return authorization[len("Bearer "):]
+    return request.client.host if request.client else "unknown"
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     settings.validate()
@@ -112,15 +137,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url=None,
     )
-    cache: ClassificationCache[ClassificationDecision] = ClassificationCache(
-        max_entries=settings.cache_max_entries,
-        ttl_seconds=settings.cache_ttl_seconds,
-    )
+    cache = _build_cache(settings)
     # A bad policy file fails at startup, not on the first request.
     policy = load_policy(settings.policy_path)
     catalog = load_catalog(settings.model_catalog_path)
     semantic = _build_semantic(settings, policy)
-    metrics: Counter[str] = Counter({name: 0 for name in _METRIC_NAMES})
+    metrics = Metrics(_METRIC_NAMES, enable_prometheus=settings.enable_metrics)
+    rate_limiter = RateLimiter(settings.rate_limit_per_minute)
+
+    def enforce_rate_limit(request: Request) -> None:
+        if not rate_limiter.allow(_rate_limit_key(request)):
+            metrics.increment("rate_limited_total")
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate limit exceeded")
 
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_bytes)
 
@@ -142,6 +170,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/classify", response_model=ClassificationDecision, tags=["classification"])
     async def classify_request(request: Request, payload: ClassificationRequest) -> ClassificationDecision:
         authenticate(request)
+        enforce_rate_limit(request)
         if len(payload.messages) > settings.max_messages:
             raise HTTPException(status_code=422, detail="messages exceeds MAX_MESSAGES")
         messages = [message.model_dump() for message in payload.messages]
@@ -154,13 +183,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "policy_flags": payload.policy_flags,
             }, semantic=semantic, policy=policy, catalog=catalog)
             cache.put(cache_key, decision)
-            metrics["classifications_computed"] += 1
+            metrics.increment("classifications_computed")
         else:
-            metrics["classifications_cache_hits"] += 1
-        metrics["classifications_total"] += 1
+            metrics.increment("classifications_cache_hits")
+        metrics.increment("classifications_total")
         if settings.log_decisions:
             append_decision_log(settings.decision_log_path, decision)
-            metrics["decision_logs_written"] += 1
+            metrics.increment("decision_logs_written")
         return decision
 
     @app.post("/v1/route", response_model=ClassificationDecision, include_in_schema=False)
@@ -170,7 +199,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/status", tags=["operational"])
     async def runtime_status(request: Request) -> dict[str, int]:
         authenticate(request)
-        return dict(metrics)
+        return metrics.status()
 
     @app.get("/v1/policy", tags=["operational"])
     async def active_policy(request: Request) -> dict[str, str]:
@@ -182,18 +211,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authenticate(request)
         return {"version": catalog.version, "sha256": catalog.sha256, "currency": catalog.currency}
 
+    if settings.enable_metrics:
+        @app.get("/metrics", include_in_schema=False)
+        async def prometheus_metrics() -> Response:
+            body, content_type = metrics.render_prometheus()
+            return Response(body, media_type=content_type)
+
     if settings.enable_feedback:
         @app.post("/v1/feedback", response_model=FeedbackAck, tags=["classification"])
         async def submit_feedback(request: Request, payload: FeedbackRequest) -> FeedbackAck:
             authenticate(request)
+            enforce_rate_limit(request)
             append_feedback_log(settings.feedback_log_path, payload)
-            metrics["feedback_received"] += 1
+            metrics.increment("feedback_received")
             return FeedbackAck(status="recorded")
 
     if settings.enable_proxy:
         @app.post("/v1/chat/completions", tags=["proxy"])
         async def proxy_chat_completions(request: Request) -> JSONResponse:
             authenticate(request)
+            enforce_rate_limit(request)
             body = await request.json()
             messages = body.get("messages") if isinstance(body, dict) else None
             if not isinstance(messages, list) or not messages:
@@ -204,7 +241,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "available_tools": body.get("available_tools", []),
                 "policy_flags": body.get("policy_flags", []),
             }, semantic=semantic, policy=policy, catalog=catalog)
-            metrics["proxy_requests_total"] += 1
+            metrics.increment("proxy_requests_total")
             upstream_payload = {key: value for key, value in body.items() if key not in _PROXY_ONLY_KEYS}
             try:
                 upstream_body, upstream_status = await forward_chat_completion(

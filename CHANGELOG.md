@@ -13,6 +13,9 @@ All notable changes to this project are documented here.
 - Optional feedback endpoint (`ENABLE_FEEDBACK`, `FEEDBACK_LOG_PATH`): `POST /v1/feedback` records a correction against a decision's `decision_id`. Metadata only — the schema has no field for prompt content and rejects unknown keys.
 - Versioned model catalog (`MODEL_CATALOG_PATH`, default `data/model_catalog.yaml`) mapping each abstract `recommended_model_tier` to concrete provider/model picks with illustrative per-million-token costs. Validated at startup; `python -m llm_preclassifier.validate_catalog` checks a file, `--catalog` attaches recommendations during evaluation, and `GET /v1/model-catalog` reports the active version, SHA-256 and currency.
 - Optional OpenAI-compatible proxy mode (`ENABLE_PROXY`, `PROXY_UPSTREAM_BASE_URL`, `PROXY_UPSTREAM_API_KEY`, `PROXY_TIMEOUT_SECONDS`): `POST /v1/chat/completions` classifies locally, then forwards the request unmodified to a configured upstream, returning its response byte-for-byte with the local decision attached as an `X-Preclassifier-Decision` header. Streaming is not supported yet.
+- Optional Prometheus metrics (`ENABLE_METRICS`): `GET /metrics` mirrors the `/status` counters in Prometheus text format.
+- Optional Redis-backed decision cache (`REDIS_URL`, `redis` extra) so multiple instances can share cached decisions instead of each keeping an independent in-memory LRU.
+- Optional per-key rate limiting (`RATE_LIMIT_PER_MINUTE`) on the classification, feedback and proxy endpoints, keyed by bearer token or client IP; returns `429` once exceeded.
 
 ### Changed
 
@@ -20,7 +23,7 @@ All notable changes to this project are documented here.
 - `policy_version` in decisions is now the policy file's version (`2026.09.1` by default) instead of the fixed `v1`. The default policy reproduces the previous rules exactly.
 - Decisions now carry a `decision_id` (opaque, stable across cache hits for the same request) for correlating `/v1/feedback` submissions.
 - Decisions now carry `model_recommendations`, populated from the active model catalog for the four actionable tiers (empty for `unknown` and `human_or_policy_review`).
-- New runtime dependencies: `pyyaml`, `httpx`.
+- New runtime dependencies: `pyyaml`, `httpx`, `prometheus-client`. New optional extra: `redis`.
 
 ### Results
 

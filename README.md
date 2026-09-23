@@ -129,6 +129,9 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 | `PROXY_UPSTREAM_BASE_URL` | `""` | OpenAI-compatible base URL (e.g. `https://api.openai.com/v1`); required when `ENABLE_PROXY=true`. |
 | `PROXY_UPSTREAM_API_KEY` | `""` | Bearer key sent to the upstream; required when `ENABLE_PROXY=true`. Never accepted from the client. |
 | `PROXY_TIMEOUT_SECONDS` | `60` | Upstream request timeout. |
+| `ENABLE_METRICS` | `false` | Expose `GET /metrics` in Prometheus text format, alongside the existing `/status` JSON. |
+| `REDIS_URL` | `""` | Back the decision cache with Redis instead of in-memory (e.g. `redis://localhost:6379/0`); requires the `redis` extra. Empty uses the in-memory LRU/TTL cache. |
+| `RATE_LIMIT_PER_MINUTE` | `0` | Per-key request cap on `/v1/classify`, `/v1/route`, `/v1/feedback` and `/v1/chat/completions` (`0` disables). Keyed by bearer token, or client IP when auth is off. |
 
 The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`). Docker Compose builds the `runtime-semantic` target; use `--target runtime` for the lean rules-only image.
 
@@ -213,6 +216,19 @@ curl -X POST http://127.0.0.1:8802/v1/chat/completions \
 - The upstream API key is operator-configured server-side and is never accepted from the caller.
 - Streaming (`stream: true`) is not supported yet — the upstream call is always non-streaming.
 - This mode does not change routing decisions or pick a model on the caller's behalf; it forwards whatever `model` the client already requested. Use `model_recommendations` (from the `X-Preclassifier-Decision` header) to inform your own client-side model choice.
+
+## 📈 METRICS, CACHE BACKEND & RATE LIMITING (OPTIONAL)
+
+Three independent, off-by-default knobs for running more than one instance behind a load balancer:
+
+- **Prometheus metrics** (`ENABLE_METRICS=true`): `GET /metrics` reports the same counters as `/status` in Prometheus text format (`llm_preclassifier_classifications_total`, etc.), unauthenticated like `/healthz` so a scraper doesn't need a bearer token.
+- **Redis-backed cache** (`REDIS_URL=redis://host:6379/0`, `pip install "llm-preclassifier[redis]"`): shares the decision cache across instances instead of each process keeping its own in-memory LRU. Eviction is TTL-only (`CACHE_TTL_SECONDS`) — there's no cross-instance `CACHE_MAX_ENTRIES` cap.
+- **Per-key rate limiting** (`RATE_LIMIT_PER_MINUTE=<n>`): a fixed 60-second window per bearer token (or client IP if `CLIENT_API_KEYS` is empty) on `/v1/classify`, `/v1/route`, `/v1/feedback` and `/v1/chat/completions`. Exceeding it returns `429`. This is in-process only — with multiple instances behind a load balancer, each enforces its own limit independently.
+
+```bash
+ENABLE_METRICS=true RATE_LIMIT_PER_MINUTE=120 REDIS_URL=redis://localhost:6379/0 \
+  uvicorn --factory llm_preclassifier.api:create_app
+```
 
 ## 🎯 ACCURACY EVALUATION
 

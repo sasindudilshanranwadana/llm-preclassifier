@@ -30,6 +30,9 @@ class Settings:
     proxy_upstream_base_url: str = field(default_factory=lambda: os.getenv("PROXY_UPSTREAM_BASE_URL", ""))
     proxy_upstream_api_key: str = field(default_factory=lambda: os.getenv("PROXY_UPSTREAM_API_KEY", ""))
     proxy_timeout_seconds: float = field(default_factory=lambda: float(os.getenv("PROXY_TIMEOUT_SECONDS", "60")))
+    enable_metrics: bool = field(default_factory=lambda: os.getenv("ENABLE_METRICS", "false").lower() == "true")
+    redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
+    rate_limit_per_minute: int = field(default_factory=lambda: int(os.getenv("RATE_LIMIT_PER_MINUTE", "0")))
 
     @property
     def api_keys(self) -> tuple[str, ...]:
@@ -56,3 +59,5 @@ class Settings:
             raise RuntimeError("PROXY_UPSTREAM_API_KEY is required when ENABLE_PROXY=true")
         if self.proxy_timeout_seconds <= 0:
             raise RuntimeError("PROXY_TIMEOUT_SECONDS must be positive")
+        if self.rate_limit_per_minute < 0:
+            raise RuntimeError("RATE_LIMIT_PER_MINUTE must not be negative")

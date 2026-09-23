@@ -142,6 +142,7 @@ def test_status_reports_zero_counters_before_traffic():
         "decision_logs_written": 0,
         "feedback_received": 0,
         "proxy_requests_total": 0,
+        "rate_limited_total": 0,
     }
 
 
@@ -371,3 +372,97 @@ def test_proxy_returns_bad_gateway_on_upstream_failure(monkeypatch):
     response = api.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}]})
 
     assert response.status_code == 502
+
+
+def test_metrics_endpoint_disabled_by_default():
+    response = client().get("/metrics")
+
+    assert response.status_code == 404
+
+
+def test_metrics_endpoint_reports_prometheus_text():
+    api = client(enable_metrics=True)
+    api.post("/v1/classify", json={"messages": [{"role": "user", "content": "Summarise this report."}]})
+
+    response = api.get("/metrics")
+
+    assert response.status_code == 200
+    assert "text/plain" in response.headers["content-type"]
+    assert b"llm_preclassifier_classifications_total 1.0" in response.content
+
+
+def test_rate_limit_disabled_by_default():
+    api = client()
+    request = {"messages": [{"role": "user", "content": "hi"}]}
+
+    for _ in range(20):
+        assert api.post("/v1/classify", json=request).status_code == 200
+
+
+def test_rate_limit_returns_429_once_exceeded():
+    api = client(rate_limit_per_minute=2)
+    request = {"messages": [{"role": "user", "content": "hi"}]}
+
+    assert api.post("/v1/classify", json=request).status_code == 200
+    assert api.post("/v1/classify", json=request).status_code == 200
+    third = api.post("/v1/classify", json=request)
+
+    assert third.status_code == 429
+
+
+def test_rate_limit_is_tracked_per_client_api_key():
+    api = client(rate_limit_per_minute=1, client_api_keys="a,b")
+    request = {"messages": [{"role": "user", "content": "hi"}]}
+
+    first = api.post("/v1/classify", json=request, headers={"Authorization": "Bearer a"})
+    second = api.post("/v1/classify", json=request, headers={"Authorization": "Bearer b"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
+def test_redis_url_requires_the_redis_extra(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name == "redis":
+            raise ImportError("no module named redis")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+
+    try:
+        create_app(Settings(redis_url="redis://localhost:6379/0"))
+    except RuntimeError as error:
+        assert "redis" in str(error)
+    else:
+        raise AssertionError("expected RuntimeError when the redis package is unavailable")
+
+
+def test_redis_backed_cache_is_used_when_redis_url_is_set(monkeypatch):
+    class FakeRedisClient:
+        def __init__(self) -> None:
+            self._store = {}
+
+        def get(self, name):
+            return self._store.get(name)
+
+        def set(self, name, value, ex=None):
+            self._store[name] = value
+
+    class FakeRedisModule:
+        class Redis:
+            @staticmethod
+            def from_url(url):
+                return FakeRedisClient()
+
+    monkeypatch.setitem(__import__("sys").modules, "redis", FakeRedisModule())
+    api = client(redis_url="redis://localhost:6379/0")
+    request = {"messages": [{"role": "user", "content": "Summarise this report."}]}
+
+    first = api.post("/v1/classify", json=request).json()
+    second = api.post("/v1/classify", json=request).json()
+
+    assert first["decision_id"] == second["decision_id"]
