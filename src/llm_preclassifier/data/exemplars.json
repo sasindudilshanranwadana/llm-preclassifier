@@ -1,0 +1,156 @@
+{
+ "risk:medical": [
+  "I've had a headache for three days, what could be causing it?",
+  "Is it safe to take paracetamol and alcohol together?",
+  "My toddler has a fever of 39 degrees, should I go to hospital?",
+  "What are the symptoms of a stroke?",
+  "Can I stop taking my antidepressants suddenly?",
+  "I found a lump under my armpit, is it cancer?",
+  "How many milligrams of melatonin can a child take?",
+  "My blood pressure reading is 180 over 110, what should I do?",
+  "Is this rash on my leg something serious?",
+  "I'm pregnant, can I take this cold medicine?",
+  "What antibiotic should I take for a urinary infection?",
+  "I feel dizzy and short of breath after climbing stairs.",
+  "My insulin levels are off, how much should I inject?",
+  "I keep coughing up blood.",
+  "Can you tell me if these lab results mean I'm sick?"
+ ],
+ "risk:self_harm": [
+  "I don't want to be alive anymore.",
+  "What is the most painless way to end my life?",
+  "I've been cutting myself again.",
+  "Nobody would care if I disappeared forever.",
+  "How many sleeping pills does it take to not wake up?",
+  "I feel hopeless and keep thinking about ending it.",
+  "I want to die.",
+  "My friend says she wants to kill herself, what do I do?",
+  "I'm going to jump off the bridge tonight.",
+  "Everything feels pointless and I have a plan."
+ ],
+ "risk:legal": [
+  "Can my employer fire me for being pregnant?",
+  "Is this clause in my lease enforceable?",
+  "Do I have to pay the parking fine if the sign was hidden?",
+  "My business partner took money from the company, can I take action?",
+  "How do I respond to a court summons?",
+  "What happens if I break my tenancy agreement early?",
+  "Can I be arrested for this post I made online?",
+  "Should I plead guilty to the speeding charge?",
+  "Is it legal to record my boss without telling him?",
+  "How do I get custody of my children?",
+  "My landlord won't return my deposit, what are my rights?",
+  "Is my will valid if it wasn't witnessed?",
+  "Can I get deported for overstaying my visa by a week?",
+  "What are my rights if I'm being evicted?"
+ ],
+ "risk:financial": [
+  "Should I put my savings into stocks or bonds?",
+  "Is now a good time to buy bitcoin?",
+  "Should I take out a loan to buy shares?",
+  "How much of my salary should I put into my retirement fund?",
+  "Which stock will go up next week?",
+  "Should I remortgage my house to pay off credit cards?",
+  "Is this forex trading bot a good way to get rich?",
+  "How should I split my inheritance between property and index funds?",
+  "Can I avoid paying tax on this side income?",
+  "Should I declare bankruptcy?",
+  "Is it smart to cash out my 401k early?",
+  "Which mutual fund gives the best return for my kids' college fund?"
+ ],
+ "coding": [
+  "Refactor this function to be more readable.",
+  "Why does this JavaScript promise never resolve?",
+  "Write a unit test for the parser module.",
+  "Fix the off-by-one error in this loop.",
+  "How do I reverse a linked list in C?",
+  "Add type hints to this Python module.",
+  "This Kotlin coroutine leaks memory, can you help?",
+  "Write a SQL query that returns the top five customers by revenue.",
+  "Convert this callback code to async/await.",
+  "My React component re-renders on every keystroke.",
+  "Set up a GitHub Actions workflow to run the tests.",
+  "Explain what this Haskell monad transformer is doing in my code."
+ ],
+ "agent_action": [
+  "Email the invoice to the client.",
+  "Post an update in the team channel.",
+  "Reserve a hotel room in Kandy for Friday night.",
+  "Check whether the website is down right now.",
+  "Add a reminder to my calendar for the dentist.",
+  "Order more printer paper from the supplier.",
+  "Find flights from Colombo to Melbourne next month.",
+  "Tweet the launch announcement.",
+  "Save this document to my Google Drive.",
+  "Ping the on-call engineer about the alert."
+ ],
+ "extraction": [
+  "Pull the tracking number out of this shipping email.",
+  "Get every URL from this page source.",
+  "What is the total amount on this receipt?",
+  "List the ingredients mentioned in this recipe text.",
+  "Turn this resume into JSON with name, email and skills.",
+  "Which dates appear in this contract text?",
+  "Capture the order ID and customer name from this message.",
+  "Find all the hashtags in these tweets."
+ ],
+ "summarization": [
+  "Give me a quick recap of this article.",
+  "What's the gist of this long email?",
+  "Condense these meeting notes into action items.",
+  "Summarise this research paper in three bullets.",
+  "Briefly, what happened in this chat log?",
+  "Give me the short version of this report.",
+  "Digest this thread for someone who missed it."
+ ],
+ "writing": [
+  "Write a thank-you card for my neighbour.",
+  "Draft a product description for handmade candles.",
+  "Rewrite this paragraph in simpler English.",
+  "Translate this sentence into French.",
+  "Write a short story about a robot learning to paint.",
+  "Compose a wedding toast for my brother.",
+  "Make this cover letter sound more confident.",
+  "Write the voiceover script for a product demo video.",
+  "Draft a message to my landlord asking about the repair."
+ ],
+ "research": [
+  "What do recent studies say about screen time and sleep?",
+  "Compare the top three project management tools with sources.",
+  "What is the current population of Sri Lanka?",
+  "Find evidence on whether remote work improves productivity.",
+  "Who are the main competitors of Notion?",
+  "What changed in the newest Python release?"
+ ],
+ "planning": [
+  "Plan a week of healthy meals.",
+  "Break this product launch into milestones.",
+  "Make a study schedule for my final exams.",
+  "Outline the steps to renovate my kitchen.",
+  "Create a training plan for a half marathon.",
+  "Help me organise a birthday party for 30 people."
+ ],
+ "reasoning": [
+  "Why does ice float on water?",
+  "Is it more efficient to walk or cycle a short distance, and why?",
+  "Solve this logic puzzle step by step.",
+  "What are the trade-offs between monorepos and polyrepos?",
+  "If a train leaves at 3pm going 60 km/h, when does it arrive 150 km away?",
+  "Explain the difference between correlation and causation."
+ ],
+ "classification": [
+  "Label each of these reviews as positive or negative.",
+  "Sort these support tickets by priority.",
+  "Categorise these expenses into food, travel and office.",
+  "Tag each email as spam or not spam.",
+  "Which of these headlines are about sports?"
+ ],
+ "chat": [
+  "Hi, how's it going?",
+  "Thanks for the help earlier!",
+  "Tell me a joke.",
+  "What's your favourite colour?",
+  "Good night!",
+  "Say something fun."
+ ]
+}

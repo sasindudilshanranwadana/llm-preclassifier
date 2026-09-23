@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+### Added
+
+- Optional offline semantic layer (`[semantic]` extra, `SEMANTIC_MODEL`): nearest-exemplar voting over local `bge-small-en-v1.5` embeddings. Escalation is OR-ed with the rules; task type falls back to the semantic vote when rules have no or conflicting signals.
+- `runtime-semantic` Docker target with baked-in weights that runs with no network; now the Docker Compose default (memory limit raised to 512m).
+- `--semantic` flag for the evaluation CLI, `make eval-semantic`, a semantic CI job, and a second blind set (`blind-v2`) written after the exemplars were frozen.
+
+### Changed
+
+- Classification runs in a worker thread so CPU-bound embedding never blocks the event loop.
+
+### Results
+
+- Blind benchmarks: 37.5% → 79.2% and 26.7% → 93.3%; high-stakes escalation 15/15 (was 5/15), with 2/8 false escalations on benign look-alikes.
+
 ## 0.1.0 — Unreleased
 
 ### Added
@@ -30,6 +46,6 @@ All notable changes to this project are documented here.
 ### Known limitations
 
 - The rules are not a learned model-quality predictor and have not been evaluated as a universal routing benchmark.
-- Blind benchmark accuracy is 37.5%; unseen high-stakes phrasings are routed rather than escalated.
+- Rules-only blind accuracy is 37.5%; unseen high-stakes phrasings are routed rather than escalated unless the semantic layer is enabled.
 - Capability tiers are abstract; applications must map them to their own providers and policies.
 - The service does not proxy model completions, execute tools, or make safety guarantees.

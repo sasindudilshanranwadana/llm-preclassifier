@@ -2,7 +2,7 @@ services:
   llm-preclassifier:
     build:
       context: .
-      target: runtime
+      target: runtime-semantic
     image: llm-preclassifier:local
     ports:
       - "127.0.0.1:8802:8802"
@@ -20,5 +20,5 @@ services:
     cap_drop:
       - ALL
     pids_limit: 100
-    mem_limit: 256m
+    mem_limit: 512m
     restart: unless-stopped
