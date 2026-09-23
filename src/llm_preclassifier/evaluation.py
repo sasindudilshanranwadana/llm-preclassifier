@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from llm_preclassifier.classifier import classify
+from llm_preclassifier.policy import Policy, PolicyError, default_policy, load_policy
 
 EVALUATED_FIELDS = ("task_type", "complexity", "tool_requirement", "recommended_model_tier", "action")
 
@@ -37,6 +38,7 @@ class Miss:
 
 @dataclass(frozen=True)
 class EvalReport:
+    policy_version: str
     total: int
     overall_accuracy: float
     field_accuracy: dict[str, float]
@@ -73,7 +75,8 @@ def _parse_case(raw: dict) -> EvalCase:
     )
 
 
-def evaluate(cases: list[EvalCase], semantic=None) -> EvalReport:
+def evaluate(cases: list[EvalCase], semantic=None, policy: Policy | None = None) -> EvalReport:
+    policy = policy or default_policy()
     field_hits: Counter[str] = Counter()
     field_totals: Counter[str] = Counter()
     confusion: dict[str, dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
@@ -85,7 +88,7 @@ def evaluate(cases: list[EvalCase], semantic=None) -> EvalReport:
         decision = classify(case.messages, {
             "available_tools": case.available_tools,
             "policy_flags": case.policy_flags,
-        }, semantic=semantic).model_dump()
+        }, semantic=semantic, policy=policy).model_dump()
         case_correct = True
         for name, expected in case.expected.items():
             actual = decision[name]
@@ -100,6 +103,7 @@ def evaluate(cases: list[EvalCase], semantic=None) -> EvalReport:
         buckets[_bucket(decision["confidence"])].append((decision["confidence"], case_correct))
 
     return EvalReport(
+        policy_version=policy.version,
         total=len(cases),
         overall_accuracy=fully_correct / len(cases) if cases else 0.0,
         field_accuracy={name: field_hits[name] / field_totals[name] for name in field_totals},
@@ -139,7 +143,7 @@ def _per_class(matrix: dict[str, Counter[str]]) -> dict[str, dict[str, float]]:
 
 
 def format_report(report: EvalReport) -> str:
-    lines = [f"cases: {report.total}", f"overall (all fields correct): {report.overall_accuracy:.1%}", ""]
+    lines = [f"policy: {report.policy_version}", f"cases: {report.total}", f"overall (all fields correct): {report.overall_accuracy:.1%}", ""]
     lines += [f"  {name:<24} {accuracy:.1%}" for name, accuracy in report.field_accuracy.items()]
     lines += ["", "task_type per class:"]
     for label, stats in report.per_class.get("task_type", {}).items():
@@ -165,14 +169,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-accuracy", type=float, default=0.0, help="fail if overall accuracy is below this")
     parser.add_argument("--json", action="store_true", help="print the full report as JSON")
     parser.add_argument("--semantic", metavar="MODEL", help="enable the semantic layer with this embedding model")
+    parser.add_argument("--policy", metavar="PATH", help="policy file to evaluate (default: bundled policy)")
     args = parser.parse_args(argv)
 
+    try:
+        policy = load_policy(args.policy)
+    except PolicyError as error:
+        print(f"INVALID: {error}", file=sys.stderr)
+        return 2
     semantic = None
     if args.semantic:
         from llm_preclassifier.semantic import build_semantic_classifier
 
-        semantic = build_semantic_classifier(args.semantic, os.getenv("SEMANTIC_CACHE_DIR"))
-    report = evaluate(load_dataset(args.dataset), semantic)
+        semantic = build_semantic_classifier(args.semantic, os.getenv("SEMANTIC_CACHE_DIR"), policy)
+    report = evaluate(load_dataset(args.dataset), semantic, policy)
     print(json.dumps(asdict(report), indent=2) if args.json else format_report(report))
     if report.overall_accuracy < args.min_accuracy:
         print(f"\nFAIL: overall accuracy {report.overall_accuracy:.1%} < {args.min_accuracy:.1%}", file=sys.stderr)

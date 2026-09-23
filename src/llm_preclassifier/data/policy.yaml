@@ -1,0 +1,184 @@
+# llm-preclassifier routing policy.
+#
+# Every pattern entry is one case-insensitive regex alternative. Unless noted,
+# entries match anywhere in the latest user message on word boundaries.
+# Validate a copy with:  python -m llm_preclassifier.policy path/to/policy.yaml
+# Change `version` whenever you edit this file; it is stamped on every decision.
+
+version: '2026.09.1'
+
+patterns:
+  # Any match escalates to human_or_policy_review.
+  high_stakes:
+    - 'diagnos(?:e|is)'
+    - 'medications?'
+    - 'dos(?:e|es|age|ing)'
+    - 'overdos(?:e|ing)'
+    - 'prescriptions?'
+    - 'medical'
+    - 'suicid(?:e|al)'
+    - 'self[- ]harm'
+    - '(?:hurt|harm|kill) (?:myself|themselves|himself|herself)'
+    - 'legal advice'
+    - 'lawsuits?'
+    - 'contract dispute'
+    - 'tax return'
+    - 'financial advice'
+    - 'invest(?:ment|ments|ing)?'
+  # Actions on systems outside the workspace; these win over coding vocabulary.
+  external_action:
+    - 'search (?:the )?web'
+    - 'browse'
+    - 'look up'
+    - '(?:create|open|file|raise) (?:an? |the )?(?:issue|ticket|pull request|pr)'
+    - 'send (?:an? |the )?(?:email|message|slack|request|invite)'
+    - '(?:schedule|book) (?:an? )?(?:meeting|call|appointment)'
+    - 'upload'
+    - 'download'
+  # Actions inside the workspace; combined with coding vocabulary they stay coding.
+  workspace_action:
+    - 'read (?:the )?(?:file|repository|repo)'
+    - 'run (?:the )?(?:tests?|test suite|command)'
+    - 'execute'
+    - 'deploy'
+    - 'create (?:an? )?file'
+    - 'edit (?:the )?(?:file|config)'
+  coding:
+    - 'code'
+    - 'coding'
+    - 'bugs?'
+    - '(?:unit|failing|integration) tests?'
+    - 'test suite'
+    - 'repository'
+    - 'repo'
+    - 'function'
+    - 'class(?:es)? (?:method|definition)'
+    - 'api'
+    - 'python'
+    - 'javascript'
+    - 'typescript'
+    - 'bash'
+    - 'powershell'
+    - 'golang'
+    - 'go service'
+    - 'sql'
+    - 'c\+\+'
+    - 'c program'
+    - 'docker(?:file)?'
+    - 'regex'
+    - 'segfault'
+    - 'implement'
+    - 'refactor'
+    - 'debug'
+    - 'stack trace'
+    - 'compile'
+  extraction:
+    - 'extract'
+    - 'parse'
+    - 'pull out'
+    - 'grab'
+    - 'identify'
+    - 'find the'
+    - 'list (?:all|the|every)(?: \w+)? (?:names?|dates?|emails?|items?|numbers?|people|companies)'
+  summarization:
+    - 'summari[sz](?:e|ing)'
+    - 'tl;?dr'
+    - 'shorten'
+    - 'condense'
+    - 'boil (?:this|it)?(?: \w+){0,2} down'
+    - 'sum up'
+    - 'key points'
+    - 'gist'
+  writing:
+    - 'write'
+    - 'draft'
+    - 'rewrite'
+    - 'compose'
+    - 'proofread'
+    - 'edit (?:this|my) (?:text|essay|letter)'
+    - 'poem'
+    - 'haiku'
+    - 'essay'
+    - 'story'
+    - 'lyrics'
+    - 'cover letter'
+  research:
+    - 'research'
+    - 'compare'
+    - 'latest'
+    - 'current'
+    - 'sources?'
+    - 'citations?'
+    - 'cite'
+  planning:
+    - 'plan'
+    - 'project plan'
+    - 'roadmaps?'
+    - 'milestones?'
+    - 'itinerary'
+    - 'strateg(?:y|ies)'
+    - 'architecture'
+    - 'organi[sz]e (?:my|our|the)'
+  reasoning:
+    - 'analy[sz]e'
+    - 'reason'
+    - 'explain'
+    - 'evaluate'
+    - 'why'
+    - 'trade-?offs?'
+    - 'pros and cons'
+  multi_step:
+    - 'then'
+    - 'after that'
+    - 'and then'
+    - 'end[- ]to[- ]end'
+    - 'multiple'
+    - 'several'
+    - 'all of'
+  # Anchored at the start of the message.
+  greeting:
+    - 'hi'
+    - 'hey'
+    - 'hello'
+    - 'yo'
+    - 'thanks'
+    - 'thank you'
+    - 'cheers'
+    - 'good (?:morning|afternoon|evening)'
+    - 'how are you'
+    - 'what''?s up'
+  # Must match the whole message (trailing punctuation allowed); the request abstains.
+  ambiguous:
+    - 'help me(?: with this)?'
+    - 'fix it'
+    - 'do it'
+    - 'please help'
+
+# Checked in this order after agent_action and coding; first match wins.
+category_order: [extraction, summarization, research, planning, writing, reasoning]
+
+# More than one match among these marks the request as mixed_signals.
+mixed_signal_categories: [coding, extraction, summarization, writing, research, planning]
+
+# Unmatched requests up to this many words are chat; longer ones are classification.
+chat_max_words: 12
+
+confidence:
+  rule_match: 0.88
+  greeting: 0.85
+  fallback: 0.5
+  mixed_cap: 0.7
+  # Semantic votes score semantic_base + semantic_scale * vote share.
+  semantic_base: 0.5
+  semantic_scale: 0.4
+
+# Used only when SEMANTIC_MODEL is set.
+semantic:
+  k: 7
+  # Share of vote weight held by risk exemplars that triggers escalation.
+  risk_share: 0.35
+  min_similarity: 0.55
+  # Vote share needed to override conflicting rule signals.
+  override_share: 0.6
+  # Optional exemplar bank path, relative to this file; null uses the bundled bank.
+  exemplars: null
