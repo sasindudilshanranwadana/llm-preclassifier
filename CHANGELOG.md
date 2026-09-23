@@ -9,10 +9,13 @@ All notable changes to this project are documented here.
 - Optional offline semantic layer (`[semantic]` extra, `SEMANTIC_MODEL`): nearest-exemplar voting over local `bge-small-en-v1.5` embeddings. Escalation is OR-ed with the rules; task type falls back to the semantic vote when rules have no or conflicting signals.
 - `runtime-semantic` Docker target with baked-in weights that runs with no network; now the Docker Compose default (memory limit raised to 512m).
 - `--semantic` flag for the evaluation CLI, `make eval-semantic`, a semantic CI job, and a second blind set (`blind-v2`) written after the exemplars were frozen.
+- Versioned routing policy file (`POLICY_PATH`, default `data/policy.yaml`) holding patterns, category order, confidence values and semantic thresholds. Validated at startup; `python -m llm_preclassifier.validate_policy` checks a file, `--policy` evaluates one, and `GET /v1/policy` reports the active version and SHA-256.
 
 ### Changed
 
 - Classification runs in a worker thread so CPU-bound embedding never blocks the event loop.
+- `policy_version` in decisions is now the policy file's version (`2026.09.1` by default) instead of the fixed `v1`. The default policy reproduces the previous rules exactly.
+- New runtime dependency: `pyyaml`.
 
 ### Results
 

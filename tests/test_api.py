@@ -1,7 +1,11 @@
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from llm_preclassifier.api import create_app
 from llm_preclassifier.config import Settings
+from llm_preclassifier.policy import PolicyError
 
 
 def client(**overrides):
@@ -150,10 +154,37 @@ def test_app_passes_semantic_classifier_to_classify(monkeypatch):
 
             return SemanticVerdict("medical", None, 0.0)
 
-    monkeypatch.setattr(api, "_build_semantic", lambda settings: AlwaysMedical())
+    monkeypatch.setattr(api, "_build_semantic", lambda settings, policy: AlwaysMedical())
     response = TestClient(api.create_app(Settings(log_decisions=False))).post(
         "/v1/classify", json={"messages": [{"role": "user", "content": "Summarise this report."}]},
     )
 
     assert response.json()["action"] == "escalate"
     assert "semantic_high_stakes:medical" in response.json()["reasons"]
+
+
+def test_policy_endpoint_reports_active_policy_and_requires_auth(tmp_path):
+    policy_file = tmp_path / "policy.yaml"
+    source = Path(__file__).resolve().parents[1] / "src" / "llm_preclassifier" / "data" / "policy.yaml"
+    policy_file.write_text(source.read_text().replace("version: '2026.09.1'", "version: 'acme-7'"))
+    api = client(policy_path=str(policy_file), client_api_keys="secret")
+
+    assert api.get("/v1/policy").status_code == 401
+    body = api.get("/v1/policy", headers={"Authorization": "Bearer secret"}).json()
+    decision = api.post(
+        "/v1/classify",
+        headers={"Authorization": "Bearer secret"},
+        json={"messages": [{"role": "user", "content": "Summarise this report."}]},
+    ).json()
+
+    assert body["version"] == "acme-7"
+    assert len(body["sha256"]) == 64
+    assert decision["policy_version"] == "acme-7"
+
+
+def test_invalid_policy_fails_at_startup(tmp_path):
+    broken = tmp_path / "policy.yaml"
+    broken.write_text("version: '1'\n")
+
+    with pytest.raises(PolicyError, match="missing keys"):
+        create_app(Settings(policy_path=str(broken)))

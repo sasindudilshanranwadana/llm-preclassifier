@@ -40,7 +40,7 @@ class ClassificationDecision(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     action: DecisionAction
     reasons: list[str] = Field(min_length=1, max_length=16)
-    policy_version: Literal["v1"] = "v1"
+    policy_version: str = Field(default="v1", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 class HealthResponse(BaseModel):

@@ -22,6 +22,7 @@ class Settings:
     decision_log_path: str = field(default_factory=lambda: os.getenv("DECISION_LOG_PATH", ""))
     semantic_model: str = field(default_factory=lambda: os.getenv("SEMANTIC_MODEL", ""))
     semantic_cache_dir: str = field(default_factory=lambda: os.getenv("SEMANTIC_CACHE_DIR", ""))
+    policy_path: str = field(default_factory=lambda: os.getenv("POLICY_PATH", ""))
 
     @property
     def api_keys(self) -> tuple[str, ...]:

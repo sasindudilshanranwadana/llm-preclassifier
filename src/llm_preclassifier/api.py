@@ -13,6 +13,7 @@ from llm_preclassifier.audit import append_decision_log
 from llm_preclassifier.cache import ClassificationCache
 from llm_preclassifier.classifier import classify
 from llm_preclassifier.config import Settings
+from llm_preclassifier.policy import Policy, load_policy
 from llm_preclassifier.schemas import ClassificationDecision, ClassificationRequest, HealthResponse
 from llm_preclassifier.utils import _classification_cache_key
 
@@ -80,14 +81,14 @@ def _too_large() -> JSONResponse:
     return JSONResponse({"detail": "request body exceeds MAX_REQUEST_BYTES"}, status_code=413)
 
 
-def _build_semantic(settings: Settings):
+def _build_semantic(settings: Settings, policy: Policy):
     if not settings.semantic_model:
         return None
     try:
         from llm_preclassifier.semantic import build_semantic_classifier
     except ImportError as error:
         raise RuntimeError("SEMANTIC_MODEL requires: pip install llm-preclassifier[semantic]") from error
-    return build_semantic_classifier(settings.semantic_model, settings.semantic_cache_dir)
+    return build_semantic_classifier(settings.semantic_model, settings.semantic_cache_dir, policy)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -104,7 +105,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_entries=settings.cache_max_entries,
         ttl_seconds=settings.cache_ttl_seconds,
     )
-    semantic = _build_semantic(settings)
+    # A bad policy file fails at startup, not on the first request.
+    policy = load_policy(settings.policy_path)
+    semantic = _build_semantic(settings, policy)
     metrics: Counter[str] = Counter({name: 0 for name in _METRIC_NAMES})
 
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_bytes)
@@ -137,7 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             decision = await run_in_threadpool(classify, messages, {
                 "available_tools": payload.available_tools,
                 "policy_flags": payload.policy_flags,
-            }, semantic=semantic)
+            }, semantic=semantic, policy=policy)
             cache.put(cache_key, decision)
             metrics["classifications_computed"] += 1
         else:
@@ -156,5 +159,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def runtime_status(request: Request) -> dict[str, int]:
         authenticate(request)
         return dict(metrics)
+
+    @app.get("/v1/policy", tags=["operational"])
+    async def active_policy(request: Request) -> dict[str, str]:
+        authenticate(request)
+        return {"version": policy.version, "sha256": policy.sha256}
 
     return app

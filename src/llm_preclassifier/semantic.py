@@ -9,10 +9,12 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass
 from importlib import resources
+from pathlib import Path
 from typing import Protocol, Sequence, get_args
 
 import numpy as np
 
+from llm_preclassifier.policy import Policy, default_policy
 from llm_preclassifier.schemas import TaskType
 
 RISK_PREFIX = "risk:"
@@ -41,13 +43,22 @@ class FastEmbedEmbedder:
         return list(self._model.embed(list(texts)))
 
 
-def load_exemplars() -> dict[str, list[str]]:
-    source = resources.files("llm_preclassifier").joinpath("data/exemplars.json")
+def load_exemplars(path: Path | None = None) -> dict[str, list[str]]:
+    source = path or resources.files("llm_preclassifier").joinpath("data/exemplars.json")
     return json.loads(source.read_text(encoding="utf-8"))
 
 
-def build_semantic_classifier(model_name: str, cache_dir: str | None = None) -> SemanticClassifier:
-    return SemanticClassifier(load_exemplars(), FastEmbedEmbedder(model_name, cache_dir))
+def build_semantic_classifier(
+    model_name: str, cache_dir: str | None = None, policy: Policy | None = None,
+) -> SemanticClassifier:
+    settings = (policy or default_policy()).semantic
+    return SemanticClassifier(
+        load_exemplars(settings.exemplars),
+        FastEmbedEmbedder(model_name, cache_dir),
+        k=settings.k,
+        risk_share=settings.risk_share,
+        min_similarity=settings.min_similarity,
+    )
 
 
 class SemanticClassifier:

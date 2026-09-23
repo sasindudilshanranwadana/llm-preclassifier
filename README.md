@@ -85,7 +85,7 @@ curl -X POST http://127.0.0.1:8802/v1/classify \
   "confidence": 0.88,
   "action": "route",
   "reasons": ["offline_rules_v1"],
-  "policy_version": "v1"
+  "policy_version": "2026.09.1"
 }
 ```
 
@@ -114,6 +114,7 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 | `DECISION_LOG_PATH` | `""` | JSONL path; required when `LOG_DECISIONS=true`. |
 | `SEMANTIC_MODEL` | `""` | Embedding model for the semantic layer; empty disables it. Requires the `semantic` extra. |
 | `SEMANTIC_CACHE_DIR` | `""` | Where model weights are cached (`/opt/models` in the `runtime-semantic` image). |
+| `POLICY_PATH` | `""` | Custom routing policy YAML; empty uses the bundled [`policy.yaml`](src/llm_preclassifier/data/policy.yaml). Validated at startup. |
 
 The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`). Docker Compose builds the `runtime-semantic` target; use `--target runtime` for the lean rules-only image.
 
@@ -145,13 +146,26 @@ pip install "llm-preclassifier[semantic]"
 SEMANTIC_MODEL=BAAI/bge-small-en-v1.5 uvicorn --factory llm_preclassifier.api:create_app
 ```
 
+## 🗂️ ROUTING POLICY
+
+Patterns, category order, confidence values and semantic thresholds live in a versioned YAML file, not in code. Copy [`policy.yaml`](src/llm_preclassifier/data/policy.yaml), edit it, bump `version`, and point `POLICY_PATH` at it.
+
+```bash
+python -m llm_preclassifier.validate_policy my-policy.yaml                                  # validate: OK version=... sha256=...
+python -m llm_preclassifier.evaluation eval/holdout.jsonl --policy my-policy.yaml  # measure before deploying
+```
+
+- Every decision carries `policy_version`; `GET /v1/policy` (authenticated) returns the active version and SHA-256.
+- Invalid files (unknown or missing keys, bad regexes, out-of-range values) stop the service at startup with the offending key named, e.g. `patterns.coding[3]`.
+- `semantic.exemplars` can point at your own exemplar bank, relative to the policy file.
+
 ## 🎯 ACCURACY EVALUATION
 
 Each JSONL line sets `prompt` (or `messages`), optional `available_tools` / `policy_flags`, and the `expected` decision fields to check.
 
 | Set | Cases | Role | Rules only | Rules + semantic |
 |---|---:|---|---:|---:|
-| `eval/dataset.jsonl` | 48 | Regression, gated in CI at 95% | 100% | 100% |
+| `eval/dataset.jsonl` | 48 | Regression, gated in CI at 95% | 100% | 97.9% |
 | `eval/holdout.jsonl` | 32 | Regression, gated in CI at 95% (rules were tuned after first run) | 100% | 100% |
 | `eval/blind.jsonl` | 24 | Blind benchmark, report only | 37.5% | 79.2% |
 | `eval/blind-v2.jsonl` | 30 | Blind benchmark written after exemplars were frozen, report only | 26.7% | **93.3%** |
