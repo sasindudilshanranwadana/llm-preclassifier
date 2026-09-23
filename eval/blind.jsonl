@@ -1,0 +1,24 @@
+{"id": "b-01", "prompt": "Sue asked me to summarise the board minutes.", "expected": {"task_type": "summarization", "action": "route"}}
+{"id": "b-02", "prompt": "Write a script for a two-minute YouTube intro.", "expected": {"task_type": "writing"}}
+{"id": "b-03", "prompt": "Help me plan how to build a garden shed this weekend.", "expected": {"task_type": "planning"}}
+{"id": "b-04", "prompt": "Pick out the SKUs from this order confirmation.", "expected": {"task_type": "extraction"}}
+{"id": "b-05", "prompt": "Give me a one-paragraph recap of this podcast transcript.", "expected": {"task_type": "summarization"}}
+{"id": "b-06", "prompt": "Fix the null pointer exception in this Java class.", "expected": {"task_type": "coding"}}
+{"id": "b-07", "prompt": "Why is my Rust borrow checker complaining here?", "expected": {"task_type": "coding"}}
+{"id": "b-08", "prompt": "Post the release notes to our Slack channel.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "b-09", "prompt": "Book a table for four at an Italian place near me.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "b-10", "prompt": "Check the status page of our CDN provider right now.", "expected": {"task_type": "agent_action", "tool_requirement": "required"}}
+{"id": "b-11", "prompt": "What does current research say about intermittent fasting?", "expected": {"task_type": "research"}}
+{"id": "b-12", "prompt": "Is it better to use tabs or spaces, and why?", "expected": {"task_type": "reasoning"}}
+{"id": "b-13", "prompt": "Morning! Ready to get started?", "expected": {"task_type": "chat"}}
+{"id": "b-14", "prompt": "My chest hurts and my left arm is numb, what is happening?", "expected": {"action": "escalate"}}
+{"id": "b-15", "prompt": "Should I sign this employment contract with a non-compete clause?", "expected": {"action": "escalate"}}
+{"id": "b-16", "prompt": "How much of my pension should go into crypto?", "expected": {"action": "escalate"}}
+{"id": "b-17", "prompt": "Write a cover letter for a data analyst role.", "expected": {"task_type": "writing"}}
+{"id": "b-18", "prompt": "Translate this paragraph into Sinhala.", "expected": {"task_type": "writing"}}
+{"id": "b-19", "prompt": "Classify these support tickets by urgency.", "expected": {"task_type": "classification"}}
+{"id": "b-20", "prompt": "Design the database schema for a multi-tenant SaaS app, then write the migrations.", "expected": {"task_type": "coding", "complexity": "complex"}}
+{"id": "b-21", "prompt": "Tell me a fun fact about octopuses.", "expected": {"task_type": "chat"}}
+{"id": "b-22", "prompt": "Deploy the staging branch and then run the smoke tests.", "expected": {"task_type": "coding", "tool_requirement": "required"}}
+{"id": "b-23", "prompt": "Draft an email to my landlord about the broken heater.", "expected": {"task_type": "writing", "tool_requirement": "none"}}
+{"id": "b-24", "prompt": "Go.", "expected": {"action": "unknown"}}

@@ -78,3 +78,27 @@ def test_competing_signals_lower_confidence():
 
     assert mixed.confidence < clear.confidence
     assert "mixed_signals" in mixed.reasons
+
+
+def test_dosage_and_self_harm_phrasings_escalate():
+    for prompt in (
+        "What dosage of ibuprofen is safe with my blood thinners?",
+        "I want to hurt myself.",
+        "How many pills would be an overdose?",
+    ):
+        assert decision(prompt).action == "escalate", prompt
+
+
+def test_external_actions_beat_coding_words():
+    result = decision("Create an issue for the login bug we discussed.")
+
+    assert result.task_type == "agent_action"
+    assert result.tool_requirement == "required"
+
+
+def test_unrecognised_short_prompt_is_low_confidence_chat():
+    greeting = decision("Hello there!")
+    unmatched = decision("Tell me about otters.")
+
+    assert greeting.task_type == unmatched.task_type == "chat"
+    assert unmatched.confidence < greeting.confidence

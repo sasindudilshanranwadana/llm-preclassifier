@@ -12,6 +12,7 @@ All notable changes to this project are documented here.
 - Request limits, production credential enforcement, metadata-only optional decision logs, and security/privacy documentation.
 - Interactive GitHub Pages launch site.
 - Offline accuracy evaluation (`python -m llm_preclassifier.evaluation`) with per-class precision/recall, confusion matrix, calibration buckets, a 48-case seed dataset and a CI accuracy gate.
+- Held-out and blind evaluation sets; CI gates the regression sets at 95% and reports the blind benchmark.
 - `mixed_signals` reason with reduced confidence when several task categories match.
 
 ### Fixed
@@ -21,9 +22,14 @@ All notable changes to this project are documented here.
 - Settings read environment variables at construction, and importing `llm_preclassifier.api` no longer builds an app (Docker uses `uvicorn --factory`).
 - `/status` reports all counters, including zeros.
 - Narrowed coding and `send` patterns that misclassified everyday requests.
+- Escalation now catches dosage, overdose and self-harm phrasings (`dosage`, `hurt myself`) that were previously routed.
+- External actions (issues, pull requests, messages, meetings) classify as `agent_action` even when coding words are present.
+- Unrecognised short prompts fall back to `chat` at 0.5 confidence with a `no_category_signal` reason; greetings keep high confidence.
+- README configuration table now lists the environment variables the service actually reads.
 
 ### Known limitations
 
 - The rules are not a learned model-quality predictor and have not been evaluated as a universal routing benchmark.
+- Blind benchmark accuracy is 37.5%; unseen high-stakes phrasings are routed rather than escalated.
 - Capability tiers are abstract; applications must map them to their own providers and policies.
 - The service does not proxy model completions, execute tools, or make safety guarantees.

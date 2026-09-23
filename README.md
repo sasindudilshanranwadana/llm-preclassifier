@@ -104,12 +104,16 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `LLM_PRECLASSIFIER_HOST` | `0.0.0.0` | Bind address. |
-| `LLM_PRECLASSIFIER_PORT` | `8802` | Listening port. |
-| `LLM_PRECLASSIFIER_LOG_DECISIONS`| `false` | Log classification outcomes (but never prompt content). |
-| `LLM_PRECLASSIFIER_CACHE_SIZE` | `1000` | LRU cache capacity. |
-| `LLM_PRECLASSIFIER_CACHE_TTL_SECONDS`| `3600` | LRU cache time-to-live. |
-| `LLM_PRECLASSIFIER_API_TOKEN` | `""` | Optional static bearer token for the API. |
+| `LLM_PRECLASSIFIER_ENV` | `development` | `development` or `production`; production refuses to start without `CLIENT_API_KEYS`. |
+| `CLIENT_API_KEYS` | `""` | Comma-separated bearer tokens. Empty disables auth (development only). |
+| `MAX_REQUEST_BYTES` | `65536` | Request body limit, including chunked uploads (minimum `1024`). |
+| `MAX_MESSAGES` | `32` | Maximum messages per request. |
+| `CACHE_TTL_SECONDS` | `300` | Decision cache time-to-live. |
+| `CACHE_MAX_ENTRIES` | `1024` | Decision cache capacity (LRU). |
+| `LOG_DECISIONS` | `false` | Append decision metadata (never prompt content) as JSONL. |
+| `DECISION_LOG_PATH` | `""` | JSONL path; required when `LOG_DECISIONS=true`. |
+
+The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`).
 
 </details>
 
@@ -118,7 +122,7 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 <br>
 
 - **In-memory Processing:** Prompts are processed strictly in RAM.
-- **Zero Prompt Logging:** `LLM_PRECLASSIFIER_LOG_DECISIONS=true` logs the _decision_ (e.g. `complexity: simple`), but strips all prompt content, user messages, and headers.
+- **Zero Prompt Logging:** `LOG_DECISIONS=true` logs the _decision_ (e.g. `complexity: simple`), but strips all prompt content, user messages, and headers.
 - **Hardened Runtime:** The Docker container drops all capabilities (`--cap-drop ALL`), runs read-only (`--read-only`), prevents privilege escalation (`no-new-privileges`), and uses a non-root user.
 
 </details>
@@ -127,14 +131,24 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 
 ## 🎯 ACCURACY EVALUATION
 
-`eval/dataset.jsonl` holds labeled requests; each line sets `prompt` (or `messages`), optional `available_tools` / `policy_flags`, and the `expected` decision fields to check.
+Each JSONL line sets `prompt` (or `messages`), optional `available_tools` / `policy_flags`, and the `expected` decision fields to check.
+
+| Set | Cases | Role | Current |
+|---|---:|---|---:|
+| `eval/dataset.jsonl` | 48 | Regression, gated in CI at 95% | 100% |
+| `eval/holdout.jsonl` | 32 | Regression, gated in CI at 95% (rules were tuned after first run) | 100% |
+| `eval/blind.jsonl` | 24 | **Generalisation benchmark, never tune against it**, report only | 37.5% |
 
 ```bash
-make eval                                                   # human-readable report, fails below 80%
-python3 -m llm_preclassifier.evaluation eval/dataset.jsonl --json
+make eval         # gated regression sets
+make eval-blind   # honest generalisation number
+python3 -m llm_preclassifier.evaluation eval/blind.jsonl --json
 ```
 
-The report shows accuracy for each field, precision/recall for each class, a confusion matrix, confidence calibration and every miss. CI fails if overall accuracy drops below the floor. The bundled set is a small synthetic seed; replace or extend it with anonymised real traffic before trusting the numbers.
+> [!WARNING]
+> The blind set shows the keyword rules do not generalise: unseen phrasings of medical, legal and financial risk were **routed instead of escalated**. Do not rely on `escalate` as a safety control; treat it as a hint and keep provider-side safeguards in place.
+
+Reports include accuracy for each field, precision and recall for each class, a confusion matrix, confidence calibration and every miss. All sets are synthetic; extend them with anonymised real traffic.
 
 ## 📖 PROJECT RESOURCES
 

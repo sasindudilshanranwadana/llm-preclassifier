@@ -1,4 +1,4 @@
-.PHONY: test eval build run verify
+.PHONY: test eval eval-blind build run verify
 
 PYTHON ?= python3
 
@@ -6,7 +6,12 @@ test:
 	$(PYTHON) -m pytest tests -vv
 
 eval:
-	$(PYTHON) -m llm_preclassifier.evaluation eval/dataset.jsonl --min-accuracy 0.8
+	$(PYTHON) -m llm_preclassifier.evaluation eval/dataset.jsonl --min-accuracy 0.95
+	$(PYTHON) -m llm_preclassifier.evaluation eval/holdout.jsonl --min-accuracy 0.95
+
+# Never tune rules against this set; it measures generalisation.
+eval-blind:
+	$(PYTHON) -m llm_preclassifier.evaluation eval/blind.jsonl
 
 build:
 	docker build --target runtime -t llm-preclassifier:local .
