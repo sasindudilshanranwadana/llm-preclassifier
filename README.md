@@ -230,6 +230,26 @@ ENABLE_METRICS=true RATE_LIMIT_PER_MINUTE=120 REDIS_URL=redis://localhost:6379/0
   uvicorn --factory llm_preclassifier.api:create_app
 ```
 
+## 🧰 CLIENT SDK
+
+A small, dependency-light synchronous client ships with the package — a thin HTTP wrapper, not a reimplementation of the classifier.
+
+```python
+from llm_preclassifier.client import PreclassifierClient
+
+with PreclassifierClient("http://127.0.0.1:8802", api_key="your-token") as client:
+    decision = client.classify([{"role": "user", "content": "Summarise this report."}])
+    print(decision.task_type, decision.recommended_model_tier)
+
+    client.feedback(decision.decision_id, outcome="correct")  # requires ENABLE_FEEDBACK=true
+    client.policy()          # {"version": ..., "sha256": ...}
+    client.model_catalog()   # {"version": ..., "sha256": ..., "currency": ...}
+```
+
+- `classify(...)` and the GET endpoints retry connection errors and `5xx` responses with exponential backoff (`max_retries`, `backoff_seconds`); `4xx` responses raise immediately without retrying.
+- `feedback(...)` is never retried automatically — retrying after an ambiguous failure could record a correction twice.
+- See [`examples/python/basic_usage.py`](examples/python/basic_usage.py) for a complete runnable example.
+
 ## 🎯 ACCURACY EVALUATION
 
 Each JSONL line sets `prompt` (or `messages`), optional `available_tools` / `policy_flags`, and the `expected` decision fields to check.
