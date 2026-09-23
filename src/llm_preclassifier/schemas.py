@@ -1,5 +1,6 @@
 """Versioned public decision models."""
 from typing import Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,7 +42,30 @@ class ClassificationDecision(BaseModel):
     action: DecisionAction
     reasons: list[str] = Field(min_length=1, max_length=16)
     policy_version: str = Field(default="v1", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    decision_id: str = Field(default_factory=lambda: uuid4().hex)
 
 
 class HealthResponse(BaseModel):
     status: Literal["ok"]
+
+
+class FeedbackRequest(BaseModel):
+    """Correction for a prior decision, referenced by its opaque ``decision_id``.
+
+    Metadata only: there is no field for prompt content, and none should ever be added.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision_id: str = Field(min_length=1, max_length=64)
+    outcome: Literal["correct", "incorrect"]
+    corrected_task_type: TaskType | None = None
+    corrected_complexity: Complexity | None = None
+    corrected_tool_requirement: ToolRequirement | None = None
+    corrected_recommended_model_tier: RecommendedModelTier | None = None
+
+
+class FeedbackAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["recorded"]

@@ -1,3 +1,5 @@
+import json
+
 from pathlib import Path
 
 import pytest
@@ -138,6 +140,7 @@ def test_status_reports_zero_counters_before_traffic():
         "classifications_computed": 0,
         "classifications_cache_hits": 0,
         "decision_logs_written": 0,
+        "feedback_received": 0,
     }
 
 
@@ -188,3 +191,53 @@ def test_invalid_policy_fails_at_startup(tmp_path):
 
     with pytest.raises(PolicyError, match="missing keys"):
         create_app(Settings(policy_path=str(broken)))
+
+
+def test_feedback_endpoint_disabled_by_default():
+    api = client()
+
+    response = api.post("/v1/feedback", json={"decision_id": "abc", "outcome": "correct"})
+
+    assert response.status_code == 404
+
+
+def test_feedback_endpoint_records_correction_metadata(tmp_path):
+    log_path = tmp_path / "feedback.jsonl"
+    api = client(enable_feedback=True, feedback_log_path=str(log_path))
+    decision = api.post(
+        "/v1/classify",
+        json={"messages": [{"role": "user", "content": "Summarise this report."}]},
+    ).json()
+
+    response = api.post("/v1/feedback", json={
+        "decision_id": decision["decision_id"],
+        "outcome": "incorrect",
+        "corrected_task_type": "extraction",
+    })
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "recorded"}
+    record = json.loads(log_path.read_text())
+    assert record["decision_id"] == decision["decision_id"]
+    assert record["corrected_task_type"] == "extraction"
+    assert "prompt" not in record
+
+
+def test_feedback_requires_auth_when_configured(tmp_path):
+    log_path = tmp_path / "feedback.jsonl"
+    api = client(enable_feedback=True, feedback_log_path=str(log_path), client_api_keys="secret")
+
+    response = api.post("/v1/feedback", json={"decision_id": "abc", "outcome": "correct"})
+
+    assert response.status_code == 401
+
+
+def test_feedback_rejects_unknown_fields(tmp_path):
+    log_path = tmp_path / "feedback.jsonl"
+    api = client(enable_feedback=True, feedback_log_path=str(log_path))
+
+    response = api.post("/v1/feedback", json={
+        "decision_id": "abc", "outcome": "correct", "prompt": "leaked content",
+    })
+
+    assert response.status_code == 422

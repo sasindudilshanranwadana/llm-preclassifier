@@ -1,3 +1,5 @@
+import pytest
+
 from llm_preclassifier.config import Settings
 
 
@@ -18,3 +20,10 @@ def test_importing_api_does_not_build_an_app(monkeypatch):
     importlib.reload(api)
 
     assert not hasattr(api, "app")
+
+
+def test_enable_feedback_requires_feedback_log_path():
+    from llm_preclassifier.config import Settings
+
+    with pytest.raises(RuntimeError, match="FEEDBACK_LOG_PATH"):
+        Settings(enable_feedback=True, feedback_log_path="").validate()

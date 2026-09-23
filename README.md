@@ -85,9 +85,12 @@ curl -X POST http://127.0.0.1:8802/v1/classify \
   "confidence": 0.88,
   "action": "route",
   "reasons": ["offline_rules_v1"],
-  "policy_version": "2026.09.1"
+  "policy_version": "2026.09.1",
+  "decision_id": "3f8e2c1a9d7b4f0e8c6a5d2b1e9f7a3c"
 }
 ```
+
+`decision_id` is an opaque per-decision identifier (stable across cache hits for the same request) for referencing the decision from `/v1/feedback`.
 
 <br>
 
@@ -115,6 +118,8 @@ Configuration is entirely environment-driven. Do not commit `.env` files.
 | `SEMANTIC_MODEL` | `""` | Embedding model for the semantic layer; empty disables it. Requires the `semantic` extra. |
 | `SEMANTIC_CACHE_DIR` | `""` | Where model weights are cached (`/opt/models` in the `runtime-semantic` image). |
 | `POLICY_PATH` | `""` | Custom routing policy YAML; empty uses the bundled [`policy.yaml`](src/llm_preclassifier/data/policy.yaml). Validated at startup. |
+| `ENABLE_FEEDBACK` | `false` | Expose `POST /v1/feedback` for recording corrections against a `decision_id`. |
+| `FEEDBACK_LOG_PATH` | `""` | JSONL path; required when `ENABLE_FEEDBACK=true`. |
 
 The container listens on port `8802` (`uvicorn --factory llm_preclassifier.api:create_app`). Docker Compose builds the `runtime-semantic` target; use `--target runtime` for the lean rules-only image.
 
@@ -158,6 +163,18 @@ python -m llm_preclassifier.evaluation eval/holdout.jsonl --policy my-policy.yam
 - Every decision carries `policy_version`; `GET /v1/policy` (authenticated) returns the active version and SHA-256.
 - Invalid files (unknown or missing keys, bad regexes, out-of-range values) stop the service at startup with the offending key named, e.g. `patterns.coding[3]`.
 - `semantic.exemplars` can point at your own exemplar bank, relative to the policy file.
+
+## 🔁 FEEDBACK LOOP (OPTIONAL)
+
+Set `ENABLE_FEEDBACK=true` and `FEEDBACK_LOG_PATH` to accept corrections against a decision, referenced by its opaque `decision_id`. The endpoint accepts structured fields only — there is no field for prompt content, and the schema rejects unknown keys.
+
+```bash
+curl -X POST http://127.0.0.1:8802/v1/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"decision_id":"3f8e2c1a9d7b4f0e8c6a5d2b1e9f7a3c","outcome":"incorrect","corrected_task_type":"extraction"}'
+```
+
+Use this to build a labeled dataset from real traffic for `--policy` evaluation, without ever capturing what was actually asked.
 
 ## 🎯 ACCURACY EVALUATION
 

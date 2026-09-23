@@ -23,6 +23,8 @@ class Settings:
     semantic_model: str = field(default_factory=lambda: os.getenv("SEMANTIC_MODEL", ""))
     semantic_cache_dir: str = field(default_factory=lambda: os.getenv("SEMANTIC_CACHE_DIR", ""))
     policy_path: str = field(default_factory=lambda: os.getenv("POLICY_PATH", ""))
+    enable_feedback: bool = field(default_factory=lambda: os.getenv("ENABLE_FEEDBACK", "false").lower() == "true")
+    feedback_log_path: str = field(default_factory=lambda: os.getenv("FEEDBACK_LOG_PATH", ""))
 
     @property
     def api_keys(self) -> tuple[str, ...]:
@@ -41,3 +43,5 @@ class Settings:
             raise RuntimeError("CLIENT_API_KEYS must contain at least one key in production mode")
         if self.log_decisions and not self.decision_log_path:
             raise RuntimeError("DECISION_LOG_PATH is required when LOG_DECISIONS=true")
+        if self.enable_feedback and not self.feedback_log_path:
+            raise RuntimeError("FEEDBACK_LOG_PATH is required when ENABLE_FEEDBACK=true")

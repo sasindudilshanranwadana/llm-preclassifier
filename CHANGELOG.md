@@ -10,11 +10,13 @@ All notable changes to this project are documented here.
 - `runtime-semantic` Docker target with baked-in weights that runs with no network; now the Docker Compose default (memory limit raised to 512m).
 - `--semantic` flag for the evaluation CLI, `make eval-semantic`, a semantic CI job, and a second blind set (`blind-v2`) written after the exemplars were frozen.
 - Versioned routing policy file (`POLICY_PATH`, default `data/policy.yaml`) holding patterns, category order, confidence values and semantic thresholds. Validated at startup; `python -m llm_preclassifier.validate_policy` checks a file, `--policy` evaluates one, and `GET /v1/policy` reports the active version and SHA-256.
+- Optional feedback endpoint (`ENABLE_FEEDBACK`, `FEEDBACK_LOG_PATH`): `POST /v1/feedback` records a correction against a decision's `decision_id`. Metadata only — the schema has no field for prompt content and rejects unknown keys.
 
 ### Changed
 
 - Classification runs in a worker thread so CPU-bound embedding never blocks the event loop.
 - `policy_version` in decisions is now the policy file's version (`2026.09.1` by default) instead of the fixed `v1`. The default policy reproduces the previous rules exactly.
+- Decisions now carry a `decision_id` (opaque, stable across cache hits for the same request) for correlating `/v1/feedback` submissions.
 - New runtime dependency: `pyyaml`.
 
 ### Results
