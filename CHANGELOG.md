@@ -11,12 +11,14 @@ All notable changes to this project are documented here.
 - `--semantic` flag for the evaluation CLI, `make eval-semantic`, a semantic CI job, and a second blind set (`blind-v2`) written after the exemplars were frozen.
 - Versioned routing policy file (`POLICY_PATH`, default `data/policy.yaml`) holding patterns, category order, confidence values and semantic thresholds. Validated at startup; `python -m llm_preclassifier.validate_policy` checks a file, `--policy` evaluates one, and `GET /v1/policy` reports the active version and SHA-256.
 - Optional feedback endpoint (`ENABLE_FEEDBACK`, `FEEDBACK_LOG_PATH`): `POST /v1/feedback` records a correction against a decision's `decision_id`. Metadata only — the schema has no field for prompt content and rejects unknown keys.
+- Versioned model catalog (`MODEL_CATALOG_PATH`, default `data/model_catalog.yaml`) mapping each abstract `recommended_model_tier` to concrete provider/model picks with illustrative per-million-token costs. Validated at startup; `python -m llm_preclassifier.validate_catalog` checks a file, `--catalog` attaches recommendations during evaluation, and `GET /v1/model-catalog` reports the active version, SHA-256 and currency.
 
 ### Changed
 
 - Classification runs in a worker thread so CPU-bound embedding never blocks the event loop.
 - `policy_version` in decisions is now the policy file's version (`2026.09.1` by default) instead of the fixed `v1`. The default policy reproduces the previous rules exactly.
 - Decisions now carry a `decision_id` (opaque, stable across cache hits for the same request) for correlating `/v1/feedback` submissions.
+- Decisions now carry `model_recommendations`, populated from the active model catalog for the four actionable tiers (empty for `unknown` and `human_or_policy_review`).
 - New runtime dependency: `pyyaml`.
 
 ### Results

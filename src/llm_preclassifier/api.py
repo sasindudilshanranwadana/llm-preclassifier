@@ -11,6 +11,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from llm_preclassifier.audit import append_decision_log, append_feedback_log
 from llm_preclassifier.cache import ClassificationCache
+from llm_preclassifier.catalog import load_catalog
 from llm_preclassifier.classifier import classify
 from llm_preclassifier.config import Settings
 from llm_preclassifier.policy import Policy, load_policy
@@ -114,6 +115,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     # A bad policy file fails at startup, not on the first request.
     policy = load_policy(settings.policy_path)
+    catalog = load_catalog(settings.model_catalog_path)
     semantic = _build_semantic(settings, policy)
     metrics: Counter[str] = Counter({name: 0 for name in _METRIC_NAMES})
 
@@ -147,7 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             decision = await run_in_threadpool(classify, messages, {
                 "available_tools": payload.available_tools,
                 "policy_flags": payload.policy_flags,
-            }, semantic=semantic, policy=policy)
+            }, semantic=semantic, policy=policy, catalog=catalog)
             cache.put(cache_key, decision)
             metrics["classifications_computed"] += 1
         else:
@@ -171,6 +173,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def active_policy(request: Request) -> dict[str, str]:
         authenticate(request)
         return {"version": policy.version, "sha256": policy.sha256}
+
+    @app.get("/v1/model-catalog", tags=["operational"])
+    async def active_model_catalog(request: Request) -> dict:
+        authenticate(request)
+        return {"version": catalog.version, "sha256": catalog.sha256, "currency": catalog.currency}
 
     if settings.enable_feedback:
         @app.post("/v1/feedback", response_model=FeedbackAck, tags=["classification"])

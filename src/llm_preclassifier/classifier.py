@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Iterable
 
+from llm_preclassifier.catalog import ModelCatalog
 from llm_preclassifier.policy import Policy, default_policy
-from llm_preclassifier.schemas import ClassificationDecision, Message
+from llm_preclassifier.schemas import ClassificationDecision, Message, ModelRecommendation
 from llm_preclassifier.utils import _flatten_text, _has_tool_history
 
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ def classify(
     metadata: dict | None = None,
     semantic: SemanticClassifier | None = None,
     policy: Policy | None = None,
+    catalog: ModelCatalog | None = None,
 ) -> ClassificationDecision:
     """Return an explainable decision without sending prompt content anywhere."""
     policy = policy or default_policy()
@@ -33,13 +35,13 @@ def classify(
     has_tools = bool(metadata.get("available_tools")) or _has_tool_history([item.model_dump() for item in normalized])
 
     if not latest or patterns["ambiguous"].match(latest):
-        return _decision(policy, "unknown", "unknown", "unknown", "unknown", 0.0, "unknown",
+        return _decision(policy, catalog, "unknown", "unknown", "unknown", "unknown", 0.0, "unknown",
                          ["insufficient_request_context"])
     verdict = semantic.assess(latest) if semantic else None
     escalation_reasons = _escalation_reasons(latest, metadata, verdict, policy)
     if escalation_reasons:
         return _decision(
-            policy, "unknown", "unknown", "unknown", "human_or_policy_review", 0.5,
+            policy, catalog, "unknown", "unknown", "unknown", "human_or_policy_review", 0.5,
             "escalate", escalation_reasons,
         )
 
@@ -80,8 +82,8 @@ def classify(
     if mixed and not use_semantic:
         confidence = min(confidence, confidences["mixed_cap"])
         reasons.append("mixed_signals")
-    return _decision(policy, task_type, complexity, tool_requirement, _tier(task_type, requires_tools, is_complex),
-                     min(confidence, 1.0), "route", reasons)
+    return _decision(policy, catalog, task_type, complexity, tool_requirement,
+                     _tier(task_type, requires_tools, is_complex), min(confidence, 1.0), "route", reasons)
 
 
 def _escalation_reasons(latest: str, metadata: dict, verdict, policy: Policy) -> list[str]:
@@ -119,7 +121,21 @@ def _competing_categories(text: str, policy: Policy) -> int:
     return sum(1 for name in policy.mixed_signal_categories if policy.patterns[name].search(text))
 
 
-def _decision(policy: Policy, task_type, complexity, tool_requirement, tier, confidence, action, reasons) -> ClassificationDecision:
+def _decision(
+    policy: Policy, catalog: ModelCatalog | None, task_type, complexity, tool_requirement, tier, confidence,
+    action, reasons,
+) -> ClassificationDecision:
+    recommendations = [
+        ModelRecommendation(
+            provider=rec.provider,
+            model=rec.model,
+            input_cost_per_million=rec.input_cost_per_million,
+            output_cost_per_million=rec.output_cost_per_million,
+            currency=catalog.currency,
+            notes=rec.notes,
+        )
+        for rec in (catalog.recommendations_for(tier) if catalog else ())
+    ]
     return ClassificationDecision(
         task_type=task_type,
         complexity=complexity,
@@ -129,4 +145,5 @@ def _decision(policy: Policy, task_type, complexity, tool_requirement, tier, con
         action=action,
         reasons=reasons,
         policy_version=policy.version,
+        model_recommendations=recommendations,
     )
