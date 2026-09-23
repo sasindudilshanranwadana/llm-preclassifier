@@ -16,7 +16,7 @@ All notable changes to this project are documented here.
 - Optional Prometheus metrics (`ENABLE_METRICS`): `GET /metrics` mirrors the `/status` counters in Prometheus text format.
 - Optional Redis-backed decision cache (`REDIS_URL`, `redis` extra) so multiple instances can share cached decisions instead of each keeping an independent in-memory LRU.
 - Optional per-key rate limiting (`RATE_LIMIT_PER_MINUTE`) on the classification, feedback and proxy endpoints, keyed by bearer token or client IP; returns `429` once exceeded.
-- Bundled learned task model (`data/task_model.bin`, `learned` policy section): a hashed n-gram logistic regression trained on pinned public datasets. It relabels the rules' `chat`/`classification` fallback when it is at least 60% confident (reason `learned_task_model`), in pure Python with no new runtime dependencies. `training/train_task_model.py` reproduces it (`[train]` extra).
+- Bundled learned task model (`data/task_model.bin`, `learned` policy section): a hashed n-gram logistic regression trained on seven pinned public datasets, with benchmark prompts excluded. It relabels the rules' `chat`/`classification` fallback when it is at least 60% confident (reason `learned_task_model`), in pure Python with no new runtime dependencies. `training/train_task_model.py` reproduces it (`[train]` extra).
 - `llm_preclassifier.client.PreclassifierClient`: a small synchronous SDK wrapping `/v1/classify`, `/v1/feedback`, `/v1/policy`, `/v1/model-catalog` and `/healthz`, with retry/backoff on connection errors and 5xx responses. See [`examples/python/basic_usage.py`](examples/python/basic_usage.py).
 
 ### Changed

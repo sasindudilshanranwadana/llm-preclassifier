@@ -7,6 +7,12 @@ Sources and labels (labels come from each dataset, not from us):
   - sahil2801/CodeAlpaca-20k (CC BY 4.0): coding.
   - glaiveai/glaive-function-calling-v2 (Apache-2.0): first user turn of conversations
     whose first assistant turn calls a function -> agent_action.
+  - tldr-pages/tldr (CC BY 4.0): example descriptions of shell commands -> agent_action.
+  - bigcode/commitpackft (MIT), Python subset: commit subjects -> coding.
+  - allenai/soda (CC BY 4.0), validation split: dialogue turns -> chat.
+  - openai/gsm8k (MIT): word problems -> reasoning.
+
+Rows matching a prompt in eval/*.jsonl are dropped so the benchmarks stay blind.
 
 Rows are split 70/15/15 into train/val/test by a stable hash of their source id.
 Tune only on val. Pass --evaluate-test once, after tuning is frozen.
@@ -21,6 +27,7 @@ import json
 import random
 import re
 import sys
+import tarfile
 import urllib.request
 import zlib
 from array import array
@@ -28,6 +35,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
+import pyarrow.parquet as pq
 from scipy.sparse import csr_matrix
 from sklearn.linear_model import LogisticRegression
 
@@ -40,7 +48,12 @@ SOURCES = {
                    "code_alpaca_20k.json"),
     "glaive": ("glaiveai/glaive-function-calling-v2", "e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac",
                "glaive-function-calling-v2.json"),
+    "commitpack": ("bigcode/commitpackft", "fc56fe33c030c6daa414c2b112c932b8eed085e6", "data/python/data.jsonl"),
+    "soda": ("allenai/soda", "fdc848ab0183208ea7808206c91c724414d0a071", "valid.parquet"),
+    "gsm8k": ("openai/gsm8k", "740312add88f781978c0658806c59bc2815b9866", "main/train-00000-of-00001.parquet"),
 }
+TLDR = ("tldr-pages/tldr", "59f09394d48f5ac3d354ec0d7e9aebafb6856155")
+TLDR_PLATFORMS = ("common", "linux", "osx")
 DOLLY_LABELS = {
     "classification": "classification", "information_extraction": "extraction",
     "summarization": "summarization", "creative_writing": "writing",
@@ -50,21 +63,45 @@ DOLLY_LABELS = {
 PER_LABEL_CAP = 4000
 BUCKETS = 1 << 15
 SEED = 20260924
+_TLDR_EXAMPLE = re.compile(r"^- (.+?):?$", re.MULTILINE)
+_TLDR_PAGE = re.compile(rf"/pages/(?:{'|'.join(TLDR_PLATFORMS)})/([^/]+)\.md$")
 _FIRST_TURN = re.compile(r"USER:(.*?)\n\s*\n\s*(?:ASSISTANT|FUNCTION RESPONSE):(.*?)(?:<\|endoftext\|>|\n\s*\n\s*USER:|$)",
                          re.DOTALL)
 
 
 def download(data_dir: Path) -> dict[str, Path]:
     data_dir.mkdir(parents=True, exist_ok=True)
+    urls = {
+        name: (f"https://huggingface.co/datasets/{repo}/resolve/{revision}/{filename}",
+               f"{name}-{revision[:8]}{Path(filename).suffix}")
+        for name, (repo, revision, filename) in SOURCES.items()
+    }
+    urls["tldr"] = (f"https://codeload.github.com/{TLDR[0]}/tar.gz/{TLDR[1]}", f"tldr-{TLDR[1][:8]}.tar.gz")
     paths = {}
-    for name, (repo, revision, filename) in SOURCES.items():
+    for name, (url, filename) in urls.items():
         path = data_dir / filename
         if not path.exists():
-            url = f"https://huggingface.co/datasets/{repo}/resolve/{revision}/{filename}"
             print(f"downloading {url}", file=sys.stderr)
             urllib.request.urlretrieve(url, path)
         paths[name] = path
     return paths
+
+
+def normalize(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def eval_prompts(eval_dir: Path) -> set[str]:
+    prompts = set()
+    for path in eval_dir.glob("*.jsonl"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                case = json.loads(line)
+                texts = [case.get("prompt", "")] + [
+                    m["content"] for m in case.get("messages", []) if isinstance(m.get("content"), str)
+                ]
+                prompts.update(normalize(text) for text in texts if text)
+    return prompts
 
 
 def split_of(source_id: str) -> str:
@@ -90,30 +127,66 @@ def load_rows(paths: dict[str, Path]) -> list[dict]:
         match = _FIRST_TURN.search(record["chat"])
         if match and "<functioncall>" in match.group(2):
             rows.append({"id": f"glaive:{index}", "text": match.group(1).strip(), "label": "agent_action"})
+    for index, line in enumerate(paths["commitpack"].open(encoding="utf-8")):
+        rows.append({"id": f"commitpack:{index}", "text": json.loads(line)["subject"].strip(), "label": "coding"})
+    for index, dialogue in enumerate(pq.read_table(paths["soda"], columns=["dialogue"]).column(0).to_pylist()):
+        # All turns, not just openers, so short replies ("Sounds good.") are covered; the dialogue is the split group.
+        for turn, text in enumerate(dialogue or []):
+            rows.append({"id": f"soda:{index}:{turn}", "group": f"soda:{index}", "text": text.strip(), "label": "chat"})
+    for index, question in enumerate(pq.read_table(paths["gsm8k"], columns=["question"]).column(0).to_pylist()):
+        rows.append({"id": f"gsm8k:{index}", "text": question.strip(), "label": "reasoning"})
+    rows.extend(tldr_rows(paths["tldr"]))
     return rows
 
 
-def prepare(rows: list[dict]) -> list[dict]:
-    """Drop empty and conflicting duplicates, then cap each label so no source dominates."""
+def tldr_rows(path: Path) -> list[dict]:
+    """One row per example description; the page is the split group so a command never straddles splits."""
+    rows = []
+    with tarfile.open(path) as archive:
+        for member in sorted(archive.getmembers(), key=lambda m: m.name):
+            page = _TLDR_PAGE.search(member.name)
+            if not page or not member.isfile():
+                continue
+            text = archive.extractfile(member).read().decode("utf-8")
+            if "This command is an alias of" in text:
+                continue
+            for number, match in enumerate(_TLDR_EXAMPLE.finditer(text)):
+                description = match.group(1).replace("`", "").strip()
+                rows.append({"id": f"tldr:{page.group(1)}:{number}", "group": f"tldr:{page.group(1)}",
+                             "text": description, "label": "agent_action"})
+    return rows
+
+
+def source_of(row: dict) -> str:
+    return row["id"].split(":", 1)[0]
+
+
+def prepare(rows: list[dict], blocked: set[str]) -> list[dict]:
+    """Drop empty, conflicting, duplicate and benchmark rows, then cap each label, shared evenly by its sources."""
     labels_by_text: dict[str, set[str]] = {}
     for row in rows:
-        labels_by_text.setdefault(" ".join(row["text"].lower().split()), set()).add(row["label"])
+        labels_by_text.setdefault(normalize(row["text"]), set()).add(row["label"])
     seen: set[str] = set()
     kept = []
     for row in rows:
-        key = " ".join(row["text"].lower().split())
-        if not key or len(labels_by_text[key]) > 1 or key in seen:
+        key = normalize(row["text"])
+        if not key or len(labels_by_text[key]) > 1 or key in seen or key in blocked:
             continue
         seen.add(key)
-        kept.append({**row, "split": split_of(row["id"])})
+        kept.append({**row, "split": split_of(row.get("group", row["id"]))})
+    sources_per_label: dict[str, set[str]] = {}
+    for row in kept:
+        sources_per_label.setdefault(row["label"], set()).add(source_of(row))
     rng = random.Random(SEED)
     rng.shuffle(kept)
-    counts: Counter[tuple[str, str]] = Counter()
+    counts: Counter[tuple[str, str, str]] = Counter()
     capped = []
     for row in kept:
-        cap = PER_LABEL_CAP * {"train": 70, "val": 15, "test": 15}[row["split"]] // 100
-        if counts[(row["split"], row["label"])] < cap:
-            counts[(row["split"], row["label"])] += 1
+        share = PER_LABEL_CAP // len(sources_per_label[row["label"]])
+        cap = share * {"train": 70, "val": 15, "test": 15}[row["split"]] // 100
+        key = (row["split"], row["label"], source_of(row))
+        if counts[key] < cap:
+            counts[key] += 1
             capped.append(row)
     return capped
 
@@ -156,12 +229,16 @@ def accuracy(model: TaskModel, rows: list[dict]) -> float:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data-dir", type=Path, required=True)
+    parser.add_argument("--eval-dir", type=Path, default=Path("eval"), help="benchmark prompts to exclude")
     parser.add_argument("--output", type=Path, default=Path("src/llm_preclassifier/data/task_model.bin"))
     parser.add_argument("--c", type=float, nargs="+", default=[0.5, 2.0, 8.0, 32.0])
     parser.add_argument("--evaluate-test", action="store_true", help="report held-out test metrics (run once)")
     args = parser.parse_args(argv)
 
-    rows = prepare(load_rows(download(args.data_dir)))
+    blocked = eval_prompts(args.eval_dir)
+    if not blocked:
+        parser.error(f"no benchmark prompts found in {args.eval_dir}; refusing to train without decontamination")
+    rows = prepare(load_rows(download(args.data_dir)), blocked)
     by_split = {name: [row for row in rows if row["split"] == name] for name in ("train", "val", "test")}
     for name, split_rows in by_split.items():
         print(f"{name}: {len(split_rows)} {dict(sorted(Counter(r['label'] for r in split_rows).items()))}")
@@ -180,7 +257,8 @@ def main(argv: list[str] | None = None) -> int:
 
     val_accuracy, c, classifier = best
     metadata = {
-        "sources": {name: {"repo": repo, "revision": revision} for name, (repo, revision, _) in SOURCES.items()},
+        "sources": {**{name: {"repo": repo, "revision": revision} for name, (repo, revision, _) in SOURCES.items()},
+                    "tldr": {"repo": TLDR[0], "revision": TLDR[1]}},
         "per_label_cap": PER_LABEL_CAP, "seed": SEED, "c": c, "val_accuracy": round(val_accuracy, 4),
         "train_rows": len(by_split["train"]),
     }

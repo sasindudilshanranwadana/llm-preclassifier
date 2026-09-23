@@ -165,10 +165,11 @@ SEMANTIC_MODEL=BAAI/bge-small-en-v1.5 uvicorn --factory llm_preclassifier.api:cr
 
 ## 📈 LEARNED TASK MODEL (BUILT IN)
 
-When no rule category matches, the rules fall back to `chat` or `classification`. In that case a small bundled model is consulted: a hashed n-gram logistic regression, ~230 KB, with pure-Python inference that adds under 1 ms per request.
-- It was trained on pinned public datasets (Dolly 15k, CodeAlpaca 20k, Glaive function-calling v2).
+When no rule category matches (and the semantic layer, if enabled, has no vote), the rules fall back to `chat` or `classification`. In that case a small bundled model is consulted: a hashed n-gram logistic regression, ~300 KB, with pure-Python inference that adds under 1 ms per request.
+- It was trained on pinned public datasets: Dolly 15k, CodeAlpaca 20k, CommitPackFT, Glaive function-calling v2, tldr-pages, SODA and GSM8K.
 - If its label has probability ≥ `learned.min_probability` (0.6), the decision uses that label with reason `learned_task_model`.
 - It never affects escalation, and it never overrides a clear rule match or a semantic vote.
+- On the 386 cases shared with the previous in-house router, rules-only agreement rose from 54.7% to 62.2%.
 - Set `learned.enabled: false` in the policy to turn it off, or point `learned.model` at your own file.
 
 See [`training/README.md`](training/README.md) for data, licenses, results, known limits, and how to reproduce the file.
