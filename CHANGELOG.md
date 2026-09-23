@@ -12,6 +12,7 @@ All notable changes to this project are documented here.
 - Versioned routing policy file (`POLICY_PATH`, default `data/policy.yaml`) holding patterns, category order, confidence values and semantic thresholds. Validated at startup; `python -m llm_preclassifier.validate_policy` checks a file, `--policy` evaluates one, and `GET /v1/policy` reports the active version and SHA-256.
 - Optional feedback endpoint (`ENABLE_FEEDBACK`, `FEEDBACK_LOG_PATH`): `POST /v1/feedback` records a correction against a decision's `decision_id`. Metadata only — the schema has no field for prompt content and rejects unknown keys.
 - Versioned model catalog (`MODEL_CATALOG_PATH`, default `data/model_catalog.yaml`) mapping each abstract `recommended_model_tier` to concrete provider/model picks with illustrative per-million-token costs. Validated at startup; `python -m llm_preclassifier.validate_catalog` checks a file, `--catalog` attaches recommendations during evaluation, and `GET /v1/model-catalog` reports the active version, SHA-256 and currency.
+- Optional OpenAI-compatible proxy mode (`ENABLE_PROXY`, `PROXY_UPSTREAM_BASE_URL`, `PROXY_UPSTREAM_API_KEY`, `PROXY_TIMEOUT_SECONDS`): `POST /v1/chat/completions` classifies locally, then forwards the request unmodified to a configured upstream, returning its response byte-for-byte with the local decision attached as an `X-Preclassifier-Decision` header. Streaming is not supported yet.
 
 ### Changed
 
@@ -19,7 +20,7 @@ All notable changes to this project are documented here.
 - `policy_version` in decisions is now the policy file's version (`2026.09.1` by default) instead of the fixed `v1`. The default policy reproduces the previous rules exactly.
 - Decisions now carry a `decision_id` (opaque, stable across cache hits for the same request) for correlating `/v1/feedback` submissions.
 - Decisions now carry `model_recommendations`, populated from the active model catalog for the four actionable tiers (empty for `unknown` and `human_or_policy_review`).
-- New runtime dependency: `pyyaml`.
+- New runtime dependencies: `pyyaml`, `httpx`.
 
 ### Results
 
@@ -55,4 +56,4 @@ All notable changes to this project are documented here.
 - The rules are not a learned model-quality predictor and have not been evaluated as a universal routing benchmark.
 - Rules-only blind accuracy is 37.5%; unseen high-stakes phrasings are routed rather than escalated unless the semantic layer is enabled.
 - Capability tiers are abstract; applications must map them to their own providers and policies.
-- The service does not proxy model completions, execute tools, or make safety guarantees.
+- The service does not execute tools or make safety guarantees. Model completions are only proxied when `ENABLE_PROXY` is explicitly turned on, and even then the request is forwarded unmodified — the service never picks a model or rewrites a prompt on the caller's behalf.

@@ -141,6 +141,7 @@ def test_status_reports_zero_counters_before_traffic():
         "classifications_cache_hits": 0,
         "decision_logs_written": 0,
         "feedback_received": 0,
+        "proxy_requests_total": 0,
     }
 
 
@@ -278,3 +279,95 @@ def test_invalid_model_catalog_fails_at_startup(tmp_path):
 
     with pytest.raises(ModelCatalogError, match="missing keys"):
         create_app(Settings(model_catalog_path=str(broken)))
+
+
+def test_proxy_endpoint_disabled_by_default():
+    api = client()
+
+    response = api.post("/v1/chat/completions", json={"model": "gpt-x", "messages": [{"role": "user", "content": "hi"}]})
+
+    assert response.status_code == 404
+
+
+def test_proxy_requires_upstream_configuration():
+    with pytest.raises(RuntimeError, match="PROXY_UPSTREAM_BASE_URL"):
+        create_app(Settings(enable_proxy=True, proxy_upstream_api_key="k"))
+    with pytest.raises(RuntimeError, match="PROXY_UPSTREAM_API_KEY"):
+        create_app(Settings(enable_proxy=True, proxy_upstream_base_url="https://api.example.com/v1"))
+
+
+def test_proxy_forwards_unmodified_payload_and_attaches_decision(monkeypatch):
+    import llm_preclassifier.api as api_module
+
+    captured = {}
+
+    async def fake_forward(payload, *, base_url, api_key, timeout_seconds):
+        captured["payload"] = payload
+        captured["base_url"] = base_url
+        captured["api_key"] = api_key
+        return {"id": "chatcmpl-1", "choices": []}, 200
+
+    monkeypatch.setattr(api_module, "forward_chat_completion", fake_forward)
+    api = client(
+        enable_proxy=True,
+        proxy_upstream_base_url="https://api.example.com/v1",
+        proxy_upstream_api_key="upstream-secret",
+    )
+
+    response = api.post("/v1/chat/completions", json={
+        "model": "gpt-x",
+        "messages": [{"role": "user", "content": "Summarise this report."}],
+        "available_tools": ["terminal"],
+    })
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "chatcmpl-1", "choices": []}
+    assert "available_tools" not in captured["payload"]
+    assert captured["payload"]["model"] == "gpt-x"
+    assert captured["base_url"] == "https://api.example.com/v1"
+    decision = json.loads(response.headers["X-Preclassifier-Decision"])
+    assert decision["task_type"] == "summarization"
+
+
+def test_proxy_requires_auth_when_configured():
+    api = client(
+        enable_proxy=True,
+        proxy_upstream_base_url="https://api.example.com/v1",
+        proxy_upstream_api_key="upstream-secret",
+        client_api_keys="secret",
+    )
+
+    response = api.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}]})
+
+    assert response.status_code == 401
+
+
+def test_proxy_rejects_missing_messages():
+    api = client(
+        enable_proxy=True,
+        proxy_upstream_base_url="https://api.example.com/v1",
+        proxy_upstream_api_key="upstream-secret",
+    )
+
+    response = api.post("/v1/chat/completions", json={"model": "gpt-x"})
+
+    assert response.status_code == 422
+
+
+def test_proxy_returns_bad_gateway_on_upstream_failure(monkeypatch):
+    import llm_preclassifier.api as api_module
+    from llm_preclassifier.proxy import UpstreamError
+
+    async def failing_forward(payload, *, base_url, api_key, timeout_seconds):
+        raise UpstreamError("connection refused")
+
+    monkeypatch.setattr(api_module, "forward_chat_completion", failing_forward)
+    api = client(
+        enable_proxy=True,
+        proxy_upstream_base_url="https://api.example.com/v1",
+        proxy_upstream_api_key="upstream-secret",
+    )
+
+    response = api.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}]})
+
+    assert response.status_code == 502

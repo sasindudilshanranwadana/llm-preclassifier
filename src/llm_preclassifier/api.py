@@ -15,6 +15,7 @@ from llm_preclassifier.catalog import load_catalog
 from llm_preclassifier.classifier import classify
 from llm_preclassifier.config import Settings
 from llm_preclassifier.policy import Policy, load_policy
+from llm_preclassifier.proxy import UpstreamError, forward_chat_completion
 from llm_preclassifier.schemas import (
     ClassificationDecision,
     ClassificationRequest,
@@ -30,7 +31,9 @@ _METRIC_NAMES = (
     "classifications_cache_hits",
     "decision_logs_written",
     "feedback_received",
+    "proxy_requests_total",
 )
+_PROXY_ONLY_KEYS = ("available_tools", "policy_flags")
 
 
 class RequestSizeLimitMiddleware:
@@ -186,5 +189,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             append_feedback_log(settings.feedback_log_path, payload)
             metrics["feedback_received"] += 1
             return FeedbackAck(status="recorded")
+
+    if settings.enable_proxy:
+        @app.post("/v1/chat/completions", tags=["proxy"])
+        async def proxy_chat_completions(request: Request) -> JSONResponse:
+            authenticate(request)
+            body = await request.json()
+            messages = body.get("messages") if isinstance(body, dict) else None
+            if not isinstance(messages, list) or not messages:
+                raise HTTPException(status_code=422, detail="messages is required")
+            if len(messages) > settings.max_messages:
+                raise HTTPException(status_code=422, detail="messages exceeds MAX_MESSAGES")
+            decision = await run_in_threadpool(classify, messages, {
+                "available_tools": body.get("available_tools", []),
+                "policy_flags": body.get("policy_flags", []),
+            }, semantic=semantic, policy=policy, catalog=catalog)
+            metrics["proxy_requests_total"] += 1
+            upstream_payload = {key: value for key, value in body.items() if key not in _PROXY_ONLY_KEYS}
+            try:
+                upstream_body, upstream_status = await forward_chat_completion(
+                    upstream_payload,
+                    base_url=settings.proxy_upstream_base_url,
+                    api_key=settings.proxy_upstream_api_key,
+                    timeout_seconds=settings.proxy_timeout_seconds,
+                )
+            except UpstreamError as error:
+                raise HTTPException(status_code=502, detail=f"upstream error: {error}") from error
+            return JSONResponse(
+                upstream_body,
+                status_code=upstream_status,
+                headers={"X-Preclassifier-Decision": decision.model_dump_json()},
+            )
 
     return app
