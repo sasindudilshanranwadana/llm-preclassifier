@@ -171,7 +171,7 @@ def test_app_passes_semantic_classifier_to_classify(monkeypatch):
 def test_policy_endpoint_reports_active_policy_and_requires_auth(tmp_path):
     policy_file = tmp_path / "policy.yaml"
     source = Path(__file__).resolve().parents[1] / "src" / "llm_preclassifier" / "data" / "policy.yaml"
-    policy_file.write_text(source.read_text().replace("version: '2026.09.1'", "version: 'acme-7'"))
+    policy_file.write_text(source.read_text().replace("version: '2026.09.2'", "version: 'acme-7'"))
     api = client(policy_path=str(policy_file), client_api_keys="secret")
 
     assert api.get("/v1/policy").status_code == 401

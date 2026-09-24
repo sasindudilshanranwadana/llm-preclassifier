@@ -16,6 +16,7 @@ All notable changes to this project are documented here.
 - Optional Prometheus metrics (`ENABLE_METRICS`): `GET /metrics` mirrors the `/status` counters in Prometheus text format.
 - Optional Redis-backed decision cache (`REDIS_URL`, `redis` extra) so multiple instances can share cached decisions instead of each keeping an independent in-memory LRU.
 - Optional per-key rate limiting (`RATE_LIMIT_PER_MINUTE`) on the classification, feedback and proxy endpoints, keyed by bearer token or client IP; returns `429` once exceeded.
+- Bundled learned task model (`data/task_model.bin`, `learned` policy section): a hashed n-gram logistic regression trained on seven pinned public datasets, with benchmark prompts excluded. It relabels the rules' `chat`/`classification` fallback when it is at least 60% confident (reason `learned_task_model`), in pure Python with no new runtime dependencies. `training/train_task_model.py` reproduces it (`[train]` extra).
 - `llm_preclassifier.client.PreclassifierClient`: a small synchronous SDK wrapping `/v1/classify`, `/v1/feedback`, `/v1/policy`, `/v1/model-catalog` and `/healthz`, with retry/backoff on connection errors and 5xx responses. See [`examples/python/basic_usage.py`](examples/python/basic_usage.py).
 
 ### Changed
@@ -24,10 +25,12 @@ All notable changes to this project are documented here.
 - `policy_version` in decisions is now the policy file's version (`2026.09.1` by default) instead of the fixed `v1`. The default policy reproduces the previous rules exactly.
 - Decisions now carry a `decision_id` (opaque, stable across cache hits for the same request) for correlating `/v1/feedback` submissions.
 - Decisions now carry `model_recommendations`, populated from the active model catalog for the four actionable tiers (empty for `unknown` and `human_or_policy_review`).
+- Default policy version is now `2026.09.2` (adds the `learned` section). Policies without `learned` still validate and use the default.
 - New runtime dependencies: `pyyaml`, `httpx`, `prometheus-client`. New optional extra: `redis`.
 
 ### Results
 
+- Rules-only blind benchmarks with the learned model: 37.5% → 45.8% and 26.7% → 33.3%.
 - Blind benchmarks: 37.5% → 79.2% and 26.7% → 93.3%; high-stakes escalation 15/15 (was 5/15), with 2/8 false escalations on benign look-alikes.
 
 ## 0.1.0 — Unreleased

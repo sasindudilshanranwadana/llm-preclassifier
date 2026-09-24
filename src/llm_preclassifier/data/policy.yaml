@@ -5,7 +5,7 @@
 # Validate a copy with:  python -m llm_preclassifier.policy path/to/policy.yaml
 # Change `version` whenever you edit this file; it is stamped on every decision.
 
-version: '2026.09.1'
+version: '2026.09.2'
 
 patterns:
   # Any match escalates to human_or_policy_review.
@@ -182,3 +182,13 @@ semantic:
   override_share: 0.6
   # Optional exemplar bank path, relative to this file; null uses the bundled bank.
   exemplars: null
+
+# Learned task model, consulted only when no rule category matched.
+# Trained on pinned public datasets; see training/README.md.
+learned:
+  enabled: true
+  # Minimum model probability to override the rules' chat/classification fallback.
+  # 0.6 was chosen on the validation split only.
+  min_probability: 0.6
+  # Optional model path, relative to this file; null uses the bundled model.
+  model: null

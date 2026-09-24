@@ -27,10 +27,14 @@ ORDERABLE_CATEGORIES = frozenset({"extraction", "summarization", "research", "pl
 MIXABLE_CATEGORIES = ORDERABLE_CATEGORIES | {"coding"}
 CONFIDENCE_KEYS = ("rule_match", "greeting", "fallback", "mixed_cap", "semantic_base", "semantic_scale")
 SEMANTIC_KEYS = ("k", "risk_share", "min_similarity", "override_share", "exemplars")
+LEARNED_KEYS = ("enabled", "min_probability", "model")
 TOP_LEVEL_KEYS = (
     "version", "patterns", "category_order", "mixed_signal_categories",
     "chat_max_words", "confidence", "semantic",
 )
+# Optional so policies written before the learned model still validate.
+OPTIONAL_TOP_LEVEL_KEYS = ("learned",)
+DEFAULT_LEARNED = {"enabled": True, "min_probability": 0.6, "model": None}
 _VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
@@ -48,6 +52,13 @@ class SemanticSettings:
 
 
 @dataclass(frozen=True)
+class LearnedSettings:
+    enabled: bool
+    min_probability: float
+    model: Path | None
+
+
+@dataclass(frozen=True)
 class Policy:
     version: str
     sha256: str
@@ -57,6 +68,7 @@ class Policy:
     chat_max_words: int
     confidence: Mapping[str, float]
     semantic: SemanticSettings
+    learned: LearnedSettings
 
 
 @lru_cache(maxsize=1)
@@ -87,7 +99,7 @@ def parse_policy(text: str, label: str, base_dir: Path | None) -> Policy:
     def fail(message: str) -> PolicyError:
         return PolicyError(f"{label}: {message}")
 
-    _check_keys(raw, TOP_LEVEL_KEYS, "", fail)
+    _check_keys(raw, TOP_LEVEL_KEYS, "", fail, optional=OPTIONAL_TOP_LEVEL_KEYS)
     version = str(raw["version"])
     if not _VERSION.match(version):
         raise fail("version must be 1-64 characters of letters, digits, '.', '_' or '-'")
@@ -114,13 +126,14 @@ def parse_policy(text: str, label: str, base_dir: Path | None) -> Policy:
         chat_max_words=chat_max_words,
         confidence=MappingProxyType(confidence),
         semantic=_semantic(raw["semantic"], base_dir, fail),
+        learned=_learned(raw.get("learned", DEFAULT_LEARNED), base_dir, fail),
     )
 
 
-def _check_keys(section, expected: tuple[str, ...], prefix: str, fail) -> None:
+def _check_keys(section, expected: tuple[str, ...], prefix: str, fail, optional: tuple[str, ...] = ()) -> None:
     if not isinstance(section, dict):
         raise fail(f"{prefix.rstrip('.') or 'policy'} must be a mapping")
-    unknown = sorted(set(section) - set(expected))
+    unknown = sorted(set(section) - set(expected) - set(optional))
     missing = sorted(set(expected) - set(section))
     if unknown:
         raise fail(f"unknown keys: {', '.join(prefix + key for key in unknown)}")
@@ -181,6 +194,24 @@ def _semantic(section, base_dir: Path | None, fail) -> SemanticSettings:
         min_similarity=_unit(section["min_similarity"], "semantic.min_similarity", fail),
         override_share=_unit(section["override_share"], "semantic.override_share", fail),
         exemplars=exemplars,
+    )
+
+
+def _learned(section, base_dir: Path | None, fail) -> LearnedSettings:
+    _check_keys(section, LEARNED_KEYS, "learned.", fail)
+    if not isinstance(section["enabled"], bool):
+        raise fail("learned.enabled must be true or false")
+    model = section["model"]
+    if model is not None:
+        if base_dir is None:
+            raise fail("learned.model must be null in the bundled policy")
+        model = (base_dir / str(model)).resolve()
+        if not model.is_file():
+            raise fail(f"learned.model file not found: {model}")
+    return LearnedSettings(
+        enabled=section["enabled"],
+        min_probability=_unit(section["min_probability"], "learned.min_probability", fail),
+        model=model,
     )
 
 

@@ -1,11 +1,14 @@
 """Deterministic, offline-first request classification."""
 from __future__ import annotations
 
+from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
 from llm_preclassifier.catalog import ModelCatalog
 from llm_preclassifier.policy import Policy, default_policy
 from llm_preclassifier.schemas import ClassificationDecision, Message, ModelRecommendation
+from llm_preclassifier.task_model import DEFERRED_LABEL, TaskModel, TaskPrediction, load_task_model
 from llm_preclassifier.utils import _flatten_text, _has_tool_history
 
 if TYPE_CHECKING:
@@ -57,10 +60,17 @@ def classify(
         and (task_type in {"chat", "classification"}
              or (mixed and verdict.task_share >= policy.semantic.override_share))
     )
+    learned = None
+    if not use_semantic and not greeting and task_type in {"chat", "classification"}:
+        learned = _learned_prediction(latest, policy)
     if use_semantic:
         task_type = verdict.task_type
         requires_tools = requires_tools or task_type == "agent_action"
         reasons.append("semantic_task_vote")
+    elif learned is not None:
+        task_type = learned.task_type
+        requires_tools = requires_tools or task_type == "agent_action"
+        reasons.append("learned_task_model")
     tool_requirement = "required" if requires_tools else ("optional" if has_tools else "none")
     if requires_tools:
         reasons.append("tool_required")
@@ -72,6 +82,8 @@ def classify(
 
     if use_semantic:
         confidence = round(confidences["semantic_base"] + confidences["semantic_scale"] * verdict.task_share, 2)
+    elif learned is not None:
+        confidence = round(learned.probability, 2)
     elif greeting:
         confidence = confidences["greeting"]
     elif task_type in {"chat", "classification"}:
@@ -84,6 +96,21 @@ def classify(
         reasons.append("mixed_signals")
     return _decision(policy, catalog, task_type, complexity, tool_requirement,
                      _tier(task_type, requires_tools, is_complex), min(confidence, 1.0), "route", reasons)
+
+
+def _learned_prediction(latest: str, policy: Policy) -> TaskPrediction | None:
+    """The learned model's label when it is confident and has an opinion; otherwise the rules stand."""
+    if not policy.learned.enabled:
+        return None
+    prediction = _task_model(policy.learned.model).predict(latest)
+    if prediction.task_type == DEFERRED_LABEL or prediction.probability < policy.learned.min_probability:
+        return None
+    return prediction
+
+
+@lru_cache(maxsize=4)
+def _task_model(path: Path | None) -> TaskModel:
+    return load_task_model(path)
 
 
 def _escalation_reasons(latest: str, metadata: dict, verdict, policy: Policy) -> list[str]:
